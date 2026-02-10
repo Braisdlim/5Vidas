@@ -1,104 +1,133 @@
 import { useRef, useState } from 'react';
 import { IRefPhaserGame, PhaserGame } from './PhaserGame';
-import { MainMenu } from './game/scenes/MainMenu';
+import { GameHUD } from './components/GameHUD';
+import { gameController } from './game/GameController';
+import { multiplayer } from './network/MultiplayerClient';
 
-function App()
-{
-    // The sprite can only be moved in the MainMenu Scene
-    const [canMoveSprite, setCanMoveSprite] = useState(true);
+import { audioManager } from './engine/AudioManager';
 
-    //  References to the PhaserGame component (game and scene are exposed)
+type GameScreen = 'menu' | 'game';
+
+function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
-    const [spritePosition, setSpritePosition] = useState({ x: 0, y: 0 });
-
-    const changeScene = () => {
-
-        if(phaserRef.current)
-        {     
-            const scene = phaserRef.current.scene as MainMenu;
-            
-            if (scene)
-            {
-                scene.changeScene();
+    const [screen, setScreen] = useState<GameScreen>('menu');
+    const [playerName, setPlayerName] = useState(() => {
+        try {
+            const stored = localStorage.getItem('cinco-vidas-player');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return parsed.name || '';
             }
+        } catch { /* ignore */ }
+        return '';
+    });
+
+    const handleStartGame = () => {
+        // Local Play
+        const playerId = getOrCreatePlayerId();
+        // Init controller
+        gameController.init(playerId);
+        gameController.setOnlineMode(false);
+        gameController.startGame([playerName || 'Jugador', 'Bot 1', 'Bot 2', 'Bot 3']);
+
+        setScreen('game');
+    };
+
+    const handleMultiplayer = async () => {
+        const playerId = getOrCreatePlayerId();
+        gameController.init(playerId);
+        gameController.setOnlineMode(true); // Prepare for online
+
+        try {
+            // Join or Create "cinco_vidas" room automatically
+            // This ensures players land in the same room for testing
+            await multiplayer.joinOrCreateRoom("cinco_vidas", { name: playerName });
+            setScreen('game');
+        } catch (e) {
+            console.error(e);
+            alert("Error al conectar: " + e);
+            gameController.setOnlineMode(false);
         }
-    }
+    };
 
-    const moveSprite = () => {
+    const currentScene = (_scene: Phaser.Scene) => {
+        // Scene callback - can be used for React<->Phaser communication
+    };
 
-        if(phaserRef.current)
-        {
+    if (screen === 'menu') {
+        return (
+            <div id="app">
+                <div className="overlay">
+                    <div className="panel flex-col gap-md" style={{ textAlign: 'center', width: '90%', maxWidth: '360px' }}>
+                        <h1 style={{ marginBottom: '4px', textShadow: '0 0 30px rgba(230,184,0,0.3)' }}>
+                            CINCO VIDAS
+                        </h1>
+                        <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
+                            Juego de cartas de baraja española
+                        </p>
 
-            const scene = phaserRef.current.scene as MainMenu;
+                        <input
+                            className="input"
+                            type="text"
+                            placeholder="Tu nombre..."
+                            value={playerName}
+                            onChange={(e) => setPlayerName(e.target.value)}
+                            maxLength={16}
+                            onKeyDown={(e) => e.key === 'Enter' && handleStartGame()}
+                        />
 
-            if (scene && scene.scene.key === 'MainMenu')
-            {
-                // Get the update logo position
-                scene.moveLogo(({ x, y }) => {
+                        <button
+                            className="btn btn-primary mt-sm"
+                            onClick={() => {
+                                audioManager.playClick();
+                                handleStartGame();
+                            }}
+                            style={{ width: '100%', padding: '14px', fontSize: '16px' }}
+                        >
+                            🃏 Jugar vs Bots
+                        </button>
 
-                    setSpritePosition({ x, y });
+                        <button
+                            className="btn btn-secondary mt-sm"
+                            onClick={() => {
+                                audioManager.playClick();
+                                handleMultiplayer();
+                            }}
+                            style={{ width: '100%', padding: '12px' }}
+                        >
+                            🌐 Crear Sala (Online)
+                        </button>
 
-                });
-            }
-        }
-
-    }
-
-    const addSprite = () => {
-
-        if (phaserRef.current)
-        {
-            const scene = phaserRef.current.scene;
-
-            if (scene)
-            {
-                // Add more stars
-                const x = Phaser.Math.Between(64, scene.scale.width - 64);
-                const y = Phaser.Math.Between(64, scene.scale.height - 64);
-    
-                //  `add.sprite` is a Phaser GameObjectFactory method and it returns a Sprite Game Object instance
-                const star = scene.add.sprite(x, y, 'star');
-    
-                //  ... which you can then act upon. Here we create a Phaser Tween to fade the star sprite in and out.
-                //  You could, of course, do this from within the Phaser Scene code, but this is just an example
-                //  showing that Phaser objects and systems can be acted upon from outside of Phaser itself.
-                scene.add.tween({
-                    targets: star,
-                    duration: 500 + Math.random() * 1000,
-                    alpha: 0,
-                    yoyo: true,
-                    repeat: -1
-                });
-            }
-        }
-    }
-
-    // Event emitted from the PhaserGame component
-    const currentScene = (scene: Phaser.Scene) => {
-
-        setCanMoveSprite(scene.scene.key !== 'MainMenu');
-        
+                        <p className="text-muted" style={{ fontSize: '11px', marginTop: '24px' }}>
+                            Assets: <a href="https://jcanabal.itch.io/spanish-deck-pixel-art"
+                                style={{ color: '#8faa9a', textDecoration: 'none' }}
+                                target="_blank" rel="noopener">
+                                jcanabal
+                            </a> · v0.1.0
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
     }
 
     return (
         <div id="app">
             <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
-            <div>
-                <div>
-                    <button className="button" onClick={changeScene}>Change Scene</button>
-                </div>
-                <div>
-                    <button disabled={canMoveSprite} className="button" onClick={moveSprite}>Toggle Movement</button>
-                </div>
-                <div className="spritePosition">Sprite Position:
-                    <pre>{`{\n  x: ${spritePosition.x}\n  y: ${spritePosition.y}\n}`}</pre>
-                </div>
-                <div>
-                    <button className="button" onClick={addSprite}>Add New Sprite</button>
-                </div>
-            </div>
+            <GameHUD />
         </div>
-    )
+    );
 }
 
-export default App
+function getOrCreatePlayerId(): string {
+    try {
+        const stored = localStorage.getItem('cinco-vidas-player');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.id) return parsed.id;
+        }
+    } catch { /* ignore */ }
+    return crypto.randomUUID();
+}
+
+export default App;

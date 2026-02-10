@@ -1,0 +1,90 @@
+import { Client, Room } from "colyseus.js";
+import { useGameStore } from "../store/gameStore";
+import type { GameState } from "../engine/types";
+
+export class MultiplayerClient {
+    private client: Client;
+    private room: Room | null = null;
+    // For production, this should be configurable
+    private endpoint = "ws://localhost:2567";
+
+    constructor() {
+        this.client = new Client(this.endpoint);
+    }
+
+    public isConnected(): boolean {
+        return !!this.room;
+    }
+
+    public async createRoom(options?: any) {
+        try {
+            this.room = await this.client.create("cinco_vidas", options);
+            this.setupRoomListeners();
+            return this.room.id;
+        } catch (e) {
+            console.error("Create Room error:", e);
+            throw e;
+        }
+    }
+
+    public async joinRoom(roomId: string, options?: any) {
+        try {
+            this.room = await this.client.joinById(roomId, options);
+            this.setupRoomListeners();
+            return this.room.id;
+        } catch (e) {
+            console.error("Join Room error:", e);
+            throw e;
+        }
+    }
+
+    public async joinOrCreateRoom(roomName: string, options?: any) {
+        try {
+            this.room = await this.client.joinOrCreate(roomName, options);
+            this.setupRoomListeners();
+            return this.room.id;
+        } catch (e) {
+            console.error("Join/Create error:", e);
+            throw e;
+        }
+    }
+
+    public leave() {
+        this.room?.leave();
+        this.room = null;
+    }
+
+    public send(type: string, message?: any) {
+        if (this.room) {
+            this.room.send(type, message);
+        } else {
+            console.warn("Cannot send message, not connected:", type);
+        }
+    }
+
+    private setupRoomListeners() {
+        if (!this.room) return;
+
+        console.log("Joined room:", this.room.id, "Session:", this.room.sessionId);
+
+        // Set my player ID in store
+        useGameStore.getState().setMyPlayerId(this.room.sessionId);
+
+        // Listen for state changes
+        this.room.onStateChange((state: any) => {
+            // Convert Schema to plain JSON object
+            const json = state.toJSON();
+
+            // Update the global store (UI follows store)
+            // Note: Schema mapping must match GameState interface perfectly
+            useGameStore.getState().setGameState(json as GameState);
+        });
+
+        this.room.onLeave((code) => {
+            console.log("Left room", code);
+            // Handle disconnection? Or just clear state?
+        });
+    }
+}
+
+export const multiplayer = new MultiplayerClient();

@@ -1,31 +1,28 @@
 import { Boot } from './scenes/Boot';
-import { GameOver } from './scenes/GameOver';
-import { Game as MainGame } from './scenes/Game';
-import { MainMenu } from './scenes/MainMenu';
+import { TableScene } from './scenes/TableScene';
 import { AUTO, Game } from 'phaser';
 import { Preloader } from './scenes/Preloader';
+import { GAME_DIMENSIONS } from '../engine/constants';
 
-//  Find out more information about the Game Config at:
-//  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Phaser.Types.Core.GameConfig = {
     type: AUTO,
-    width: 1024,
-    height: 768,
+    width: GAME_DIMENSIONS.WIDTH,
+    height: GAME_DIMENSIONS.HEIGHT,
     parent: 'game-container',
-    backgroundColor: '#028af8',
+    backgroundColor: '#0d1f15',
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
+    },
     scene: [
         Boot,
         Preloader,
-        MainMenu,
-        MainGame,
-        GameOver
-    ]
+        TableScene,
+    ],
 };
 
 const StartGame = (parent: string) => {
-
     return new Game({ ...config, parent });
-
-}
+};
 
 export default StartGame;
