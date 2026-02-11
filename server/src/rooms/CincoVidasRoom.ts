@@ -104,43 +104,74 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
         this.syncState();
     }
 
-    onLeave(client: Client, consented: any) {
+    async onLeave(client: Client, consented: boolean) {
         const player = this.logicState.players.find(p => p.id === client.sessionId);
-        if (player) {
-            const wasHost = player.isHost;
+        if (!player) return;
 
-            if (this.logicState.phase === 'lobby') {
-                // Completely remove player in Lobby
-                this.logicState.players = this.logicState.players.filter(p => p.id !== client.sessionId);
-
-                // HOST MIGRATION
-                if (wasHost && this.logicState.players.length > 0) {
-                    // Assign new host to the new first player (longest waiting)
-                    this.logicState.players[0].isHost = true;
-                }
-
-                this.syncState();
+        // 1. Handle Host Migration IMMEDIATELY (so lobby doesn't freeze)
+        if (player.isHost) {
+            player.isHost = false;
+            // Find next available host (human, connected, not self)
+            // We prioritize connected players.
+            const nextHost = this.logicState.players.find(p =>
+                p.id !== client.sessionId && !p.isBot && p.isConnected
+            );
+            if (nextHost) {
+                nextHost.isHost = true;
             } else {
-                // Game in progress: Mark as disconnected
-                player.isConnected = false;
-
-                // HOST MIGRATION (In-Game)
-                // If host disconnects, pass host to next connected human
-                if (wasHost) {
-                    player.isHost = false;
-                    const nextHost = this.logicState.players.find(p => p.isConnected && !p.isBot && p.id !== client.sessionId);
-                    if (nextHost) {
-                        nextHost.isHost = true;
-                    }
-                }
-
-                this.syncState();
-
-                try {
-                    // ... reconnection logic ...
-                } catch (e) { }
+                // If no one is connected, maybe the first in list (ghost host)?
+                // Better to wait. If everyone disconnects, room dies.
+                // If only bots remain, room dies eventually.
+                const potentialHost = this.logicState.players.find(p => p.id !== client.sessionId && !p.isBot);
+                if (potentialHost) potentialHost.isHost = true;
             }
+            this.syncState();
         }
+
+        // 2. Consented Leave (User clicked "Quit") -> Remove immediately
+        if (consented) {
+            this.removePlayer(client.sessionId);
+            return;
+        }
+
+        // 3. Unconsented (Network/Tab close) -> Wait for Reconnection
+        player.isConnected = false;
+        this.syncState();
+
+        try {
+            // Allow 60 seconds to reconnect
+            await this.allowReconnection(client, 60);
+
+            // Success!
+            const reconnectedPlayer = this.logicState.players.find(p => p.id === client.sessionId);
+            if (reconnectedPlayer) {
+                reconnectedPlayer.isConnected = true;
+
+                // If they were host and we migrated it away... strictly speaking we gave it away.
+                // They rejoin as normal player.
+                // Unless they are the ONLY human?
+                this.syncState();
+            }
+
+        } catch (e) {
+            // Timeout -> Remove completely
+            this.removePlayer(client.sessionId);
+        }
+    }
+
+    private removePlayer(sessionId: string) {
+        if (this.logicState.phase === 'lobby') {
+            this.logicState.players = this.logicState.players.filter(p => p.id !== sessionId);
+        } else {
+            // In Game: Mark as permanently disconnected / eliminated?
+            // For now, keep as disconnected. Game logic handles skipping them.
+            // Or remove if we want to support dynamic drop-out?
+            // 5 Vidas usually requires fixed players.
+            // We just leave isConnected = false.
+            const p = this.logicState.players.find(p => p.id === sessionId);
+            if (p) p.isConnected = false;
+        }
+        this.syncState();
     }
 
     private startGame() {

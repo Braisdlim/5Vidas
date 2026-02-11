@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { IRefPhaserGame, PhaserGame } from './PhaserGame';
 import { GameHUD } from './components/GameHUD';
 import { LobbyUI } from './components/LobbyUI';
@@ -13,11 +13,13 @@ type GameScreen = 'menu' | 'lobby' | 'game' | 'setup_local';
 type LobbyAction =
     | { kind: 'create'; options: { maxPlayers: number; name: string } }
     | { kind: 'join'; code: string; name: string };
+import { BotDifficulty } from './engine/types';
 
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [screen, setScreen] = useState<GameScreen>('menu');
     const [botCount, setBotCount] = useState(3);
+    const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>(BotDifficulty.Medium);
     const [playerName, setPlayerName] = useState(() => {
         try {
             const stored = localStorage.getItem('cinco-vidas-player');
@@ -49,15 +51,96 @@ function App() {
         id: p.id,
         name: p.name,
         isHost: !!p.isHost,
-        isBot: !!p.isBot
+        isBot: !!p.isBot,
+        isConnected: p.isConnected !== false // Default to true if undefined
     })) || [];
 
     const isMeHost = gameState?.players.find(p => p.id === myPlayerId)?.isHost || false;
 
+    // ── NAVIGATION & HISTORY ──
+    const navigateTo = (newScreen: GameScreen) => {
+        setScreen(newScreen);
+        if (newScreen !== 'menu') {
+            window.history.pushState({ screen: newScreen }, '', `#${newScreen}`);
+        } else {
+            window.history.pushState({ screen: 'menu' }, '', location.pathname);
+        }
+    };
+
+    useEffect(() => {
+        const handlePopState = (event: PopStateEvent) => {
+            if (event.state?.screen) {
+                setScreen(event.state.screen);
+            } else {
+                setScreen('menu');
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
+    // ── AUTO-RECONNECT ──
+    useEffect(() => {
+        const checkSession = async () => {
+            if (multiplayer.hasSavedSession()) {
+                console.log("Found saved session, reconnecting...");
+                setLobbyState(prev => ({
+                    ...prev,
+                    isConnecting: true,
+                    status: 'Recuperando sesión anterior...',
+                    // Don't show error yet
+                    error: undefined
+                }));
+
+                const roomId = await multiplayer.reconnect();
+                if (roomId) {
+                    console.log("Reconnected to room:", roomId);
+                    setLobbyState(prev => ({
+                        ...prev,
+                        isConnecting: false,
+                        code: roomId,
+                        status: undefined
+                    }));
+
+                    // Determine where to go based on state
+                    // We need a small delay or check immediate state from store?
+                    // Store is updated in setupRoomListeners via callback. 
+                    // It might take a ms.
+                    // But we can just set to 'lobby' safely, and the Auto-switch logic below will move to game if needed.
+                    setScreen('lobby');
+                } else {
+                    console.log("Reconnection failed.");
+                    setLobbyState(prev => ({ ...prev, isConnecting: false, status: undefined }));
+                }
+            }
+        };
+        // Small delay to ensure mount? No, immediate is fine.
+        checkSession();
+    }, []);
+
     // Auto-switch to game when phase changes
+    // We replace setScreen with standard setScreen here to avoid pushing history loop if already there?
+    // If we auto-switch, we SHOULD push history so Back button works?
+    // Yes.
     if (screen === 'lobby' && gameState?.phase && gameState.phase !== 'lobby') {
-        setScreen('game');
+        // If we are already in game, don't loop.
+        // But this is render logic. Side effect should be in useEffect.
+        // The original code had this side effect in render body (bad practice but worked).
+        // I will keep it but filter strict check.
+        // Use navigateTo?
+        // navigateTo('game'); // BAD: triggering state update inside render.
+        // Use setTimeout or useEffect?
+        // Original code was: setScreen('game').
+        // I'll leave it but maybe move to useEffect to be safe?
     }
+
+    // Better: Move Auto-switch to useEffect
+    useEffect(() => {
+        if (screen === 'lobby' && gameState?.phase && gameState.phase !== 'lobby') {
+            navigateTo('game');
+        }
+    }, [screen, gameState?.phase]);
 
     const handleStartGame = () => {
         // Local Play
@@ -67,7 +150,7 @@ function App() {
 
         // Generate bots
         const bots = Array.from({ length: botCount }, (_, i) => `Bot ${i + 1}`);
-        gameController.startGame([playerName || 'Jugador', ...bots]);
+        gameController.startGame([playerName || 'Jugador', ...bots], botDifficulty);
 
         setScreen('game');
     };
@@ -200,7 +283,7 @@ function App() {
                             className="btn btn-primary mt-sm"
                             onClick={() => {
                                 audioManager.playClick();
-                                setScreen('setup_local');
+                                navigateTo('setup_local');
                             }}
                             style={{ width: '100%', padding: '14px', fontSize: '16px' }}
                         >
@@ -211,7 +294,7 @@ function App() {
                             className="btn btn-secondary mt-sm"
                             onClick={() => {
                                 audioManager.playClick();
-                                setScreen('lobby');
+                                navigateTo('lobby');
                             }}
                             style={{ width: '100%', padding: '12px' }}
                         >
@@ -239,7 +322,7 @@ function App() {
                         onBack={() => {
                             multiplayer.leave();
                             setLobbyState({ isConnecting: false });
-                            setScreen('menu');
+                            navigateTo('menu');
                         }}
                         onCreateRoom={handleCreateRoom}
                         onJoinRoom={handleJoinRoom}
@@ -265,6 +348,42 @@ function App() {
                         <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>PARTIDA LOCAL</h2>
 
                         <div style={{ margin: '24px 0', width: '100%' }}>
+                            {/* DIFFICULTY SELECTOR */}
+                            <label style={{ display: 'block', marginBottom: '8px', color: '#eee', fontSize: '14px' }}>Dificultad de la IA</label>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+                                {[
+                                    { level: BotDifficulty.Easy, label: 'Fácil', color: '#4caf50' },
+                                    { level: BotDifficulty.Medium, label: 'Normal', color: '#ffc107' },
+                                    { level: BotDifficulty.Hard, label: 'Difícil', color: '#ff5252' }
+                                ].map(({ level, label, color }) => {
+                                    const isSelected = botDifficulty === level;
+                                    return (
+                                        <button
+                                            key={level}
+                                            onClick={() => {
+                                                audioManager.playClick();
+                                                setBotDifficulty(level);
+                                            }}
+                                            style={{
+                                                flex: 1,
+                                                padding: '10px 4px',
+                                                background: isSelected ? `rgba(${color === '#4caf50' ? '76,175,80' : color === '#ffc107' ? '255,193,7' : '255,82,82'}, 0.2)` : 'rgba(0,0,0,0.3)',
+                                                border: `1px solid ${isSelected ? color : '#444'}`,
+                                                borderRadius: '8px',
+                                                color: isSelected ? color : '#888',
+                                                cursor: 'pointer',
+                                                transition: 'all 0.2s',
+                                                boxShadow: isSelected ? `0 0 10px ${color}40` : 'none',
+                                                fontSize: '13px',
+                                                fontWeight: isSelected ? 'bold' : 'normal'
+                                            }}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
                             <label style={{ display: 'block', marginBottom: '12px', color: '#eee' }}>
                                 Oponentes (Bots): <span style={{ color: 'var(--color-gold)', fontWeight: 'bold', fontSize: '18px' }}>{botCount}</span>
                             </label>
@@ -296,7 +415,7 @@ function App() {
                                 className="btn-text"
                                 onClick={() => {
                                     audioManager.playClick();
-                                    setScreen('menu');
+                                    navigateTo('menu');
                                 }}
                             >
                                 Cancelar

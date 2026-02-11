@@ -8,6 +8,7 @@ interface LobbyPlayer {
     name: string;
     isHost?: boolean;
     isBot?: boolean;
+    isConnected?: boolean;
 }
 
 interface Props {
@@ -260,24 +261,31 @@ export const LobbyUI: React.FC<Props> = ({
                 </div>
 
                 <div className="players-list" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
-                    {players.map((p) => (
-                        <div key={p.id} style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: '10px',
-                            background: 'rgba(255,255,255,0.05)',
-                            borderRadius: '8px',
-                            border: p.isHost ? '1px solid rgba(230,184,0,0.3)' : '1px solid transparent'
-                        }}>
-                            <span style={{ fontSize: '20px', marginRight: '12px' }}>
-                                {p.isBot ? '🤖' : '👤'}
-                            </span>
-                            <span style={{ flex: 1, textAlign: 'left', fontWeight: p.isHost ? 'bold' : 'normal', color: p.isHost ? 'var(--color-gold)' : '#eee' }}>
-                                {p.name}
-                            </span>
-                            {p.isHost && <span style={{ fontSize: '12px', color: 'var(--color-gold)' }}>ANFITRIÓN</span>}
-                        </div>
-                    ))}
+                    {players.map((p) => {
+                        const isOffline = p.isConnected === false; // If undefined, assume connected
+                        return (
+                            <div key={p.id} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                padding: '10px',
+                                background: 'rgba(255,255,255,0.05)',
+                                borderRadius: '8px',
+                                border: p.isHost ? '1px solid rgba(230,184,0,0.3)' : '1px solid transparent',
+                                opacity: isOffline ? 0.5 : 1
+                            }}>
+                                <span style={{ fontSize: '20px', marginRight: '12px' }}>
+                                    {p.isBot ? '🤖' : (isOffline ? '🔌' : '👤')}
+                                </span>
+                                <div style={{ flex: 1, textAlign: 'left', display: 'flex', flexDirection: 'column' }}>
+                                    <span style={{ fontWeight: p.isHost ? 'bold' : 'normal', color: p.isHost ? 'var(--color-gold)' : '#eee' }}>
+                                        {p.name}
+                                    </span>
+                                    {isOffline && <span style={{ fontSize: '10px', color: '#aaa' }}>Desconectado...</span>}
+                                </div>
+                                {p.isHost && <span style={{ fontSize: '12px', color: 'var(--color-gold)' }}>ANFITRIÓN</span>}
+                            </div>
+                        );
+                    })}
                     {[...Array(Math.max(0, 4 - players.length))].map((_, i) => (
                         <div key={`empty-${i}`} style={{
                             padding: '10px',
@@ -303,7 +311,7 @@ export const LobbyUI: React.FC<Props> = ({
                                 audioManager.playClick();
                                 onStartGame();
                             }}
-                            disabled={players.length < 2 && !players.some(p => p.isBot)} // Min 2 players or bots
+                            disabled={players.length < 2 && !players.some(p => p.isBot) && players.filter(p => p.isConnected !== false).length < 2} // Require 2 connected players or bots
                         >
                             EMPEZAR PARTIDA
                         </button>

@@ -43,6 +43,13 @@ export function resolveTrick(trick: PlayedCard[]): PlayedCard {
 }
 
 /**
+ * Returns true if card wins against cardToBeat (according to game rules).
+ */
+export function beats(card: Card, cardToBeat: Card): boolean {
+    return compareCards(card, cardToBeat) > 0;
+}
+
+/**
  * Calculate how many cards to deal this round.
  * Cycle: 5 → 4 → 3 → 2 → 1 → 5 → ...
  */

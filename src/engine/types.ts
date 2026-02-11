@@ -43,6 +43,15 @@ export interface Player {
     isBot: boolean;
     /** Is this player the room host? */
     isHost?: boolean;
+    /** Difficulty level for bots (optional) */
+    botDifficulty?: BotDifficulty;
+}
+
+/** Bot intelligence levels */
+export enum BotDifficulty {
+    Easy = 'Easy',
+    Medium = 'Medium',
+    Hard = 'Hard'
 }
 
 /** Game phase / state machine states */

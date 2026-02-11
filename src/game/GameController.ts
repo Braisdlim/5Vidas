@@ -12,7 +12,8 @@ import type { GameState, Player } from '../engine/types';
 import { multiplayer } from '../network/MultiplayerClient';
 import { audioManager } from '../engine/AudioManager';
 import { EventBus } from './EventBus';
-import { calculateBotPrediction, calculateBotPlay } from './ai/BotLogic';
+import { calculateBotPrediction, calculateBotPlay, BotContext } from './ai/BotLogic';
+import { BotDifficulty } from '../engine/types';
 
 class GameController {
     private static instance: GameController;
@@ -45,9 +46,9 @@ class GameController {
         }
     }
 
-    public startGame(playerNames: string[]) {
+    public startGame(playerNames: string[], botDifficulty: BotDifficulty = BotDifficulty.Medium) {
         if (this.isOnline) {
-            multiplayer.send("start_game");
+            multiplayer.send("start_game"); // Online ignores local difficulty for now
             return;
         }
 
@@ -63,7 +64,8 @@ class GameController {
             tricksWon: 0,
             seatIndex: i,
             color: PLAYER_COLORS[i % PLAYER_COLORS.length],
-            isBot: i !== 0 // First player is human
+            isBot: i !== 0, // First player is human
+            botDifficulty: i !== 0 ? botDifficulty : undefined
         }));
 
         this.state = {
@@ -248,7 +250,8 @@ class GameController {
                     this.state.cardsThisRound,
                     this.state.players,
                     this.state.dealerIndex,
-                    activeIdx
+                    activeIdx,
+                    player.botDifficulty || BotDifficulty.Medium
                 );
             } else {
                 // AFK human: 0
@@ -267,14 +270,24 @@ class GameController {
             let choice = 0;
             if (validIndices.length > 0) {
                 if (player.isBot) {
-                    // Map valid indices to actual indices in hand? 
-                    // calculateBotPlay expects indices.
-                    // But wait, calculateBotPlay logic was: 
-                    // it takes hand and validIndices array.
-                    // Let's refine calculateBotPlay signature or usage.
-                    // Actually, my calculateBotPlay implementation took (hand, currentTrick, validIndices).
-                    // And returned the INDEX of the card to play.
-                    choice = calculateBotPlay(player.hand, this.state.currentTrick, validIndices);
+                    // Create BotContext
+                    const ctx: BotContext = {
+                        hand: player.hand,
+                        currentTrick: this.state.currentTrick,
+                        // trumpCard: ?? (5 Vidas assumes standard rules where first card determines suit, or specific trump logic. Rules.ts suggests "No restrictions"? We pass what we have.)
+                        // playedCardsInRound: ?? (We need to track this if we want counting. Current state doesn't track history of round easily unless we store it. For now pass empty or recreate.)
+                        // For HARD mode to work fully, we need history. `state` doesn't seem to have `previousTricks`.
+                        // We will skip history for now (Medium level essentially).
+                        playedCardsInRound: [],
+                        myTricksWon: player.tricksWon,
+                        myPrediction: player.prediction,
+                        cardsInRound: this.state.cardsThisRound,
+                        difficulty: player.botDifficulty || BotDifficulty.Medium,
+                        leadingSuit: this.state.currentTrick.length > 0 ? this.state.currentTrick[0].card.suit : undefined,
+                        players: this.state.players
+                    };
+
+                    choice = calculateBotPlay(ctx);
                 } else {
                     // AFK human: random
                     choice = validIndices[Math.floor(Math.random() * validIndices.length)];

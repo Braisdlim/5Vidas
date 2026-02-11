@@ -71,9 +71,42 @@ export class MultiplayerClient {
         return !!this.room;
     }
 
+    private saveSession(room: Room) {
+        localStorage.setItem("cinco_vidas_roomId", room.id);
+        localStorage.setItem("cinco_vidas_sessionId", room.sessionId);
+    }
+
+    private clearSession() {
+        localStorage.removeItem("cinco_vidas_roomId");
+        localStorage.removeItem("cinco_vidas_sessionId");
+    }
+
+    public hasSavedSession(): boolean {
+        return !!localStorage.getItem("cinco_vidas_roomId") && !!localStorage.getItem("cinco_vidas_sessionId");
+    }
+
+    public async reconnect(): Promise<string | null> {
+        const roomId = localStorage.getItem("cinco_vidas_roomId");
+        const sessionId = localStorage.getItem("cinco_vidas_sessionId");
+
+        if (!roomId || !sessionId) return null;
+
+        try {
+            console.log("Attempting reconnection...", roomId, sessionId);
+            this.room = await this.client.reconnect(roomId, sessionId);
+            this.setupRoomListeners();
+            return this.room.id;
+        } catch (e) {
+            console.error("Reconnection failed:", e);
+            this.clearSession(); // Invalid session
+            return null;
+        }
+    }
+
     public async createRoom(options?: any) {
         try {
             this.room = await this.client.create("cinco_vidas", options);
+            this.saveSession(this.room);
             this.setupRoomListeners();
             return this.room.id;
         } catch (e) {
@@ -85,6 +118,7 @@ export class MultiplayerClient {
     public async joinRoom(roomId: string, options?: any) {
         try {
             this.room = await this.client.joinById(roomId, options);
+            this.saveSession(this.room);
             this.setupRoomListeners();
             return this.room.id;
         } catch (e) {
@@ -96,6 +130,7 @@ export class MultiplayerClient {
     public async joinOrCreateRoom(roomName: string, options?: any) {
         try {
             this.room = await this.client.joinOrCreate(roomName, options);
+            this.saveSession(this.room);
             this.setupRoomListeners();
             return this.room.id;
         } catch (e) {
@@ -115,7 +150,12 @@ export class MultiplayerClient {
     }
 
     public leave() {
-        this.room?.leave();
+        this.clearSession(); // Explicit leave clears session
+        this.room?.leave(true); // Send 'consented' = true (implicit in Colyseus usually default? No, explicit true needed?)
+        // Colyseus client leave(consented?: boolean). Default true?
+        // Actually colyseus.js leave(consented) sends to server?
+        // Yes, updated protocol supports it.
+        // Assuming client.leave(true) implies consented.
         this.room = null;
     }
 
@@ -130,7 +170,7 @@ export class MultiplayerClient {
     private setupRoomListeners() {
         if (!this.room) return;
 
-        console.log("Joined room:", this.room.id, "Session:", this.room.sessionId);
+        console.log("Joined/Reconnected room:", this.room.id, "Session:", this.room.sessionId);
 
         // Set my player ID in store
         useGameStore.getState().setMyPlayerId(this.room.sessionId);
@@ -147,7 +187,8 @@ export class MultiplayerClient {
 
         this.room.onLeave((code) => {
             console.log("Left room", code);
-            // Handle disconnection? Or just clear state?
+            // If code is not normal closure (1000), maybe retry?
+            // But logic above handles explicit reconnect calls.
         });
     }
 }
