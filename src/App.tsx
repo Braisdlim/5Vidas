@@ -10,6 +10,10 @@ import { audioManager } from './engine/AudioManager';
 
 type GameScreen = 'menu' | 'lobby' | 'game' | 'setup_local';
 
+type LobbyAction =
+    | { kind: 'create'; options: { maxPlayers: number; name: string } }
+    | { kind: 'join'; code: string; name: string };
+
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [screen, setScreen] = useState<GameScreen>('menu');
@@ -34,7 +38,11 @@ function App() {
         code?: string;
         isConnecting: boolean;
         error?: string;
+        status?: string;
+        canRetry?: boolean;
     }>({ isConnecting: false });
+
+    const [retryAction, setRetryAction] = useState<LobbyAction | null>(null);
 
     // Computed Lobby Data
     const lobbyPlayers = gameState?.players.map(p => ({
@@ -65,48 +73,92 @@ function App() {
     };
 
     // ── LOBBY HANDLERS ──
-    const handleCreateRoom = async (options: { maxPlayers: number }) => {
-        setLobbyState(prev => ({ ...prev, isConnecting: true, error: undefined }));
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const runLobbyAction = async (action: LobbyAction) => {
+        setRetryAction(action);
+        setLobbyState(prev => ({
+            ...prev,
+            isConnecting: true,
+            error: undefined,
+            status: 'Despertando servidor... (puede tardar ~30s la primera vez)',
+            canRetry: false
+        }));
+
         const playerId = getOrCreatePlayerId();
         gameController.init(playerId);
         gameController.setOnlineMode(true);
 
-        try {
-            const roomId = await multiplayer.createPrivateRoom({
-                name: playerName || 'Anfitrión',
-                maxClients: options.maxPlayers
-            });
+        await multiplayer.warmup({ timeoutMs: 8000 });
+
+        const retryDelays = [3000, 5000, 8000];
+        const maxAttempts = retryDelays.length + 1;
+        let lastError: unknown;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             setLobbyState(prev => ({
                 ...prev,
-                code: roomId,
-                isConnecting: false
+                status: attempt === 1
+                    ? 'Conectando...'
+                    : `Reintentando (${attempt}/${maxAttempts})...`
             }));
-            // Stay in 'lobby', LobbyUI handles 'host' view via roomCode prop
-        } catch (e) {
-            console.error(e);
-            setLobbyState(prev => ({ ...prev, isConnecting: false, error: "Error al crear sala" }));
-            gameController.setOnlineMode(false);
+
+            try {
+                const roomId = action.kind === 'create'
+                    ? await multiplayer.createPrivateRoom({
+                        name: action.options.name,
+                        maxClients: action.options.maxPlayers
+                    })
+                    : await multiplayer.joinPrivateRoom(action.code, { name: action.name });
+
+                setLobbyState(prev => ({
+                    ...prev,
+                    code: roomId,
+                    isConnecting: false,
+                    status: undefined,
+                    error: undefined,
+                    canRetry: false
+                }));
+                return;
+            } catch (e) {
+                lastError = e;
+                if (attempt < maxAttempts) {
+                    await sleep(retryDelays[attempt - 1]);
+                }
+            }
         }
+
+        console.error(lastError);
+        setLobbyState(prev => ({
+            ...prev,
+            isConnecting: false,
+            status: undefined,
+            error: action.kind === 'join'
+                ? 'No se pudo conectar. Verifica el codigo o espera unos segundos.'
+                : 'No se pudo crear la sala. El servidor puede estar dormido.',
+            canRetry: true
+        }));
+        gameController.setOnlineMode(false);
+    };
+
+    const handleCreateRoom = async (options: { maxPlayers: number }) => {
+        await runLobbyAction({
+            kind: 'create',
+            options: { maxPlayers: options.maxPlayers, name: playerName || 'Anfitrión' }
+        });
     };
 
     const handleJoinRoom = async (code: string) => {
-        setLobbyState(prev => ({ ...prev, isConnecting: true, error: undefined }));
-        const playerId = getOrCreatePlayerId();
-        gameController.init(playerId);
-        gameController.setOnlineMode(true);
+        await runLobbyAction({
+            kind: 'join',
+            code,
+            name: playerName || 'Jugador'
+        });
+    };
 
-        try {
-            const roomId = await multiplayer.joinPrivateRoom(code, { name: playerName || 'Jugador' });
-            setLobbyState(prev => ({
-                ...prev,
-                code: roomId,
-                isConnecting: false
-            }));
-        } catch (e) {
-            console.error(e);
-            setLobbyState(prev => ({ ...prev, isConnecting: false, error: "Sala no encontrada o llena" }));
-            gameController.setOnlineMode(false);
-        }
+    const handleRetry = () => {
+        if (!retryAction) return;
+        runLobbyAction(retryAction);
     };
 
     const handleLobbyStartGame = () => {
@@ -196,6 +248,8 @@ function App() {
                         players={lobbyPlayers}
                         isConnecting={lobbyState.isConnecting}
                         error={lobbyState.error}
+                        statusMessage={lobbyState.status}
+                        onRetry={lobbyState.canRetry ? handleRetry : undefined}
                         isHost={isMeHost}
                     />
                 </div>

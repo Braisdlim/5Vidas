@@ -7,6 +7,7 @@ export class MultiplayerClient {
     private room: Room | null = null;
     // For production, this should be configurable
     private endpoint = this.resolveEndpoint();
+    private healthPath = "/health";
 
     constructor() {
         this.client = new Client(this.endpoint);
@@ -19,6 +20,51 @@ export class MultiplayerClient {
         }
 
         return "ws://localhost:2567";
+    }
+
+    private getHealthUrl(): string | null {
+        try {
+            const url = new URL(this.endpoint);
+            if (url.protocol === "ws:") {
+                url.protocol = "http:";
+            } else if (url.protocol === "wss:") {
+                url.protocol = "https:";
+            }
+
+            if (url.protocol !== "http:" && url.protocol !== "https:") {
+                return null;
+            }
+
+            url.pathname = this.healthPath;
+            url.search = "";
+            url.hash = "";
+            return url.toString();
+        } catch {
+            return null;
+        }
+    }
+
+    public async warmup(options?: { timeoutMs?: number }): Promise<boolean> {
+        const healthUrl = this.getHealthUrl();
+        if (!healthUrl) return false;
+
+        const timeoutMs = options?.timeoutMs ?? 8000;
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+            const response = await fetch(healthUrl, {
+                method: "GET",
+                mode: "cors",
+                cache: "no-store",
+                signal: controller.signal
+            });
+            return response.ok;
+        } catch {
+            return false;
+        } finally {
+            window.clearTimeout(timeoutId);
+        }
     }
 
     public isConnected(): boolean {

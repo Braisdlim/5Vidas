@@ -19,6 +19,8 @@ interface Props {
     players?: LobbyPlayer[];
     isConnecting?: boolean;
     error?: string | null;
+    statusMessage?: string;
+    onRetry?: () => void;
     isHost?: boolean;
 }
 
@@ -31,6 +33,8 @@ export const LobbyUI: React.FC<Props> = ({
     players = [],
     isConnecting = false,
     error,
+    statusMessage,
+    onRetry,
     isHost = false
 }) => {
     // Local UI state for navigation within the Lobby component
@@ -138,6 +142,16 @@ export const LobbyUI: React.FC<Props> = ({
                     >
                         {isConnecting ? 'CREANDO...' : 'CREAR SALA'}
                     </button>
+                    {statusMessage && (
+                        <div className="status-banner">
+                            {statusMessage}
+                        </div>
+                    )}
+                    {onRetry && !isConnecting && (
+                        <button className="btn btn-secondary" onClick={onRetry}>
+                            REINTENTAR
+                        </button>
+                    )}
                     <button className="btn-text" onClick={() => setView('menu')} disabled={isConnecting}>
                         Cancelar
                     </button>
@@ -182,6 +196,11 @@ export const LobbyUI: React.FC<Props> = ({
                 />
 
                 {error && <div style={{ color: '#ff4444', fontSize: '14px', marginTop: '8px' }}>{error}</div>}
+                {statusMessage && (
+                    <div className="status-banner" style={{ marginTop: '8px' }}>
+                        {statusMessage}
+                    </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%', marginTop: '24px' }}>
                     <button
@@ -191,6 +210,11 @@ export const LobbyUI: React.FC<Props> = ({
                     >
                         {isConnecting ? 'CONECTANDO...' : 'ENTRAR A SALA'}
                     </button>
+                    {onRetry && !isConnecting && (
+                        <button className="btn btn-secondary" onClick={onRetry}>
+                            REINTENTAR
+                        </button>
+                    )}
                     <button className="btn-text" onClick={() => setView('menu')} disabled={isConnecting}>
                         Cancelar
                     </button>

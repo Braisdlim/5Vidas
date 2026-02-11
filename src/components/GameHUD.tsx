@@ -214,27 +214,8 @@ export function GameHUD() {
                 <>
                     {isMyTurn && !myPlayer?.isEliminated && (
                         /* Centered compact modal */
-                        <div className="overlay" style={{
-                            position: 'absolute', // Override fixed
-                            background: 'rgba(0,0,0,0.4)',
-                            backdropFilter: 'none',
-                            pointerEvents: 'auto',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: '20px'
-                        }}>
-                            <div className="panel flex-col flex-center" style={{
-                                background: 'rgba(13, 31, 21, 0.98)',
-                                border: '2px solid var(--color-gold)',
-                                boxShadow: '0 8px 24px rgba(0,0,0,0.8)',
-                                maxWidth: '400px',
-                                width: isMobile ? '90%' : 'auto',
-                                borderRadius: '12px',
-                                padding: isMobile ? '16px' : '20px',
-                                maxHeight: '80vh',
-                                overflowY: 'auto'
-                            }}>
+                        <div className="overlay prediction-overlay">
+                            <div className="panel flex-col flex-center prediction-panel">
                                 <h2 style={{
                                     fontSize: isMobile ? '16px' : '18px',
                                     marginBottom: '12px',
@@ -245,12 +226,7 @@ export function GameHUD() {
                                 }}>
                                     ¿Cuántas bazas?
                                 </h2>
-                                <div style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(4, 1fr)',
-                                    gap: '8px',
-                                    width: '100%'
-                                }}>
+                                <div className="prediction-grid">
                                     {(() => {
                                         // "Sandwich Rule" Logic
                                         const totalPredictions = players.reduce((sum, p) => sum + (p.prediction >= 0 ? p.prediction : 0), 0);
@@ -266,24 +242,9 @@ export function GameHUD() {
                                                     return (
                                                         <button
                                                             key={i}
-                                                            className="btn"
+                                                            className={`prediction-chip ${isForbidden ? 'is-forbidden' : ''}`}
                                                             onClick={() => !isForbidden && handlePredict(i)}
                                                             disabled={isForbidden}
-                                                            style={{
-                                                                padding: '10px 8px',
-                                                                fontSize: '18px',
-                                                                minHeight: '44px',
-                                                                minWidth: '44px',
-                                                                background: isForbidden ? '#222' : 'linear-gradient(135deg, #444 0%, #222 100%)',
-                                                                color: isForbidden ? '#555' : '#fff',
-                                                                border: isForbidden ? '1px dashed #555' : '1px solid #666',
-                                                                cursor: isForbidden ? 'not-allowed' : 'pointer',
-                                                                textDecoration: isForbidden ? 'line-through' : 'none',
-                                                                opacity: isForbidden ? 0.6 : 1,
-                                                                boxShadow: isForbidden ? 'none' : '0 4px 0 #111',
-                                                                transition: 'all 0.2s ease',
-                                                                ...(!isForbidden ? { border: '1px solid var(--color-gold-light)', color: 'var(--color-gold)' } : {})
-                                                            }}
                                                             title={isForbidden ? "Regla: La suma no puede igualar las cartas" : ""}
                                                         >
                                                             {i}
