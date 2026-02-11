@@ -53,6 +53,13 @@ export class Preloader extends Scene {
     }
 
     create() {
+        // Generate 'flare' texture for particle effects
+        const graphics = this.make.graphics({ x: 0, y: 0 });
+        graphics.fillStyle(0xffffff, 1);
+        graphics.fillCircle(8, 8, 8);
+        graphics.generateTexture('flare', 16, 16);
+        graphics.destroy();
+
         this.scene.start('TableScene');
     }
 }

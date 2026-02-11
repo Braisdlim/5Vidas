@@ -24,6 +24,7 @@ export class PlayerSchema extends Schema {
     @type("number") seatIndex: number = 0;
     @type("string") color: string = "#fff";
     @type("boolean") isBot: boolean = false;
+    @type("boolean") isHost: boolean = false;
 }
 
 export class CincoVidasState extends Schema {

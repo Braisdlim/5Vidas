@@ -45,7 +45,9 @@
 
     /* ── Shadows ── */
     --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.4);
+    --shadow-panel: 0 8px 24px rgba(0, 0, 0, 0.6);
     --shadow-glow: 0 0 20px rgba(230, 184, 0, 0.2);
+    --shadow-glow-strong: 0 0 30px rgba(230, 184, 0, 0.4);
 
     /* ── Transitions ── */
     --transition-fast: 150ms ease;
@@ -62,27 +64,59 @@
     padding: 0;
 }
 
-html, body {
+html,
+body {
     width: 100%;
-    height: 100%;
+    height: 100vh;
+    height: 100dvh;
+    /* Dynamic viewport height for mobile */
+    margin: 0;
+    padding: 0;
+    position: fixed;
+    /* Prevent scroll on mobile */
+    overflow: hidden;
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
+    touch-action: pan-x pan-y;
 }
 
 body {
     font-family: var(--font-body);
     background-color: var(--color-bg-primary);
     color: var(--color-text-primary);
-    min-height: 100dvh;
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+
+    /* Safe area insets for notch support */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
 }
 
 #root {
     width: 100%;
     height: 100%;
+}
+
+#game-container {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+}
+
+canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 #app {
@@ -137,13 +171,15 @@ body {
 }
 
 .btn-primary:hover {
-    box-shadow: 0 0 30px rgba(230, 184, 0, 0.4);
+    box-shadow: var(--shadow-glow-strong);
+    transform: translateY(-2px);
 }
 
 .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     box-shadow: none;
+    transform: none;
 }
 
 .btn-secondary {
@@ -154,6 +190,8 @@ body {
 
 .btn-secondary:hover {
     background: rgba(230, 184, 0, 0.1);
+    transform: translateY(-1px);
+    border-color: var(--color-gold);
 }
 
 /* ── Overlay panels ── */
@@ -176,7 +214,7 @@ body {
     border: 1px solid rgba(230, 184, 0, 0.2);
     border-radius: var(--radius-md);
     padding: var(--spacing-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-panel);
     max-width: 360px;
     width: calc(100% - var(--spacing-xl) * 2);
 }
@@ -212,14 +250,95 @@ body {
 }
 
 /* ── Utilities ── */
-.text-gold { color: var(--color-gold); }
-.text-center { text-align: center; }
-.text-muted { color: var(--color-text-secondary); }
-.font-display { font-family: var(--font-display); }
-.mt-sm { margin-top: var(--spacing-sm); }
-.mt-md { margin-top: var(--spacing-md); }
-.mt-lg { margin-top: var(--spacing-lg); }
-.gap-sm { gap: var(--spacing-sm); }
-.gap-md { gap: var(--spacing-md); }
-.flex-col { display: flex; flex-direction: column; }
-.flex-center { display: flex; align-items: center; justify-content: center; }
+.text-gold {
+    color: var(--color-gold);
+}
+
+.text-center {
+    text-align: center;
+}
+
+.text-muted {
+    color: var(--color-text-secondary);
+}
+
+.font-display {
+    font-family: var(--font-display);
+}
+
+.mt-sm {
+    margin-top: var(--spacing-sm);
+}
+
+.mt-md {
+    margin-top: var(--spacing-md);
+}
+
+.mt-lg {
+    margin-top: var(--spacing-lg);
+}
+
+.mb-md {
+    margin-bottom: var(--spacing-md);
+}
+
+.gap-sm {
+    gap: var(--spacing-sm);
+}
+
+.gap-md {
+    gap: var(--spacing-md);
+}
+
+.flex-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.flex-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ── HUD Info Panel ── */
+.hud-info-panel {
+    display: flex;
+    flex-direction: column;
+    background: rgba(13, 31, 21, 0.95);
+    border: 1px solid var(--color-gold);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-panel);
+    transition: all var(--transition-base);
+}
+
+/* ── Scoreboard Toggle Button ── */
+.scoreboard-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-body);
+    outline: none;
+    user-select: none;
+}
+
+/* ── Responsive Behavior ── */
+@media (min-width: 768px) {
+
+    /* Desktop: Panel always visible, button hidden */
+    .hud-info-panel {
+        right: 20px !important;
+    }
+
+    .scoreboard-toggle {
+        display: none !important;
+    }
+}
+
+@media (max-width: 767px) {
+
+    /* Mobile: Panel collapsible, button visible */
+    .scoreboard-toggle {
+        display: flex !important;
+    }
+}

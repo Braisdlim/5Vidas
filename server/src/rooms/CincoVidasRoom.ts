@@ -12,6 +12,18 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
     private botTimeout: NodeJS.Timeout | null = null;
 
     onCreate(options: any) {
+        // Generate random 4-char Room Code (A-Z, 0-9)
+        const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let result = "";
+        for (let i = 0; i < 4; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        this.roomId = result;
+        // console.log("Room Created:", this.roomId);
+
+        // Backup in metadata for debugging/display if roomId fails to set
+        this.setMetadata({ roomCode: result });
+
         this.setState(new CincoVidasState());
 
         // Initialize logic state
@@ -28,11 +40,14 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
             turnTimer: GAME_CONFIG.TURN_TIMER_SECONDS
         };
 
-        this.maxClients = GAME_CONFIG.MAX_PLAYERS;
+        this.maxClients = options.maxClients || GAME_CONFIG.MAX_PLAYERS;
+        if (this.maxClients < 2) this.maxClients = 2;
+        if (this.maxClients > 8) this.maxClients = 8;
 
         // Message Handlers
         this.onMessage("start_game", (client) => {
-            if (this.logicState.players[0].id === client.sessionId) {
+            const player = this.logicState.players.find(p => p.id === client.sessionId);
+            if (player && player.isHost) {
                 this.startGame();
             }
         });
@@ -75,7 +90,9 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
             tricksWon: 0,
             seatIndex: idx,
             color: PLAYER_COLORS[idx % PLAYER_COLORS.length],
-            isBot: false
+            isBot: false,
+            // First player is Host
+            isHost: this.logicState.players.length === 0
         };
 
         // Setup dealer if first player
@@ -90,26 +107,44 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
     onLeave(client: Client, consented: any) {
         const player = this.logicState.players.find(p => p.id === client.sessionId);
         if (player) {
-            player.isConnected = false;
-            this.syncState();
-            try {
-                if (consented) {
-                    throw new Error("consented leave");
+            const wasHost = player.isHost;
+
+            if (this.logicState.phase === 'lobby') {
+                // Completely remove player in Lobby
+                this.logicState.players = this.logicState.players.filter(p => p.id !== client.sessionId);
+
+                // HOST MIGRATION
+                if (wasHost && this.logicState.players.length > 0) {
+                    // Assign new host to the new first player (longest waiting)
+                    this.logicState.players[0].isHost = true;
                 }
-                // Allow reconnection logic if needed
-            } catch (e) {
-                // Remove player? Or mark disconnected?
-                // For MVP, if game hasn't started, remove.
-                if (this.logicState.phase === 'lobby') {
-                    this.logicState.players = this.logicState.players.filter(p => p.id !== client.sessionId);
-                    this.syncState();
+
+                this.syncState();
+            } else {
+                // Game in progress: Mark as disconnected
+                player.isConnected = false;
+
+                // HOST MIGRATION (In-Game)
+                // If host disconnects, pass host to next connected human
+                if (wasHost) {
+                    player.isHost = false;
+                    const nextHost = this.logicState.players.find(p => p.isConnected && !p.isBot && p.id !== client.sessionId);
+                    if (nextHost) {
+                        nextHost.isHost = true;
+                    }
                 }
+
+                this.syncState();
+
+                try {
+                    // ... reconnection logic ...
+                } catch (e) { }
             }
         }
     }
 
     private startGame() {
-        if (this.logicState.players.length < GAME_CONFIG.MIN_PLAYERS) return;
+        if (this.logicState.players.length < 2) return; // Min 2 players for any game
 
         // Add bots if needed? (optional, skip for now. Human only or manual add)
         // If single player test, maybe add bots?
@@ -117,6 +152,9 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
             // Add 1 bot for testing
             this.addBot();
         }
+
+        // Lock the room to prevent new players from joining
+        this.lock();
 
         this.logicState.dealerIndex = this.logicState.players.length - 1;
         this.logicState.activePlayerIndex = 0;
@@ -260,6 +298,7 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
             pSchema.seatIndex = p.seatIndex;
             pSchema.color = p.color;
             pSchema.isBot = !!p.isBot;
+            pSchema.isHost = !!p.isHost;
 
             // Sync Hand (Full sync for now)
             pSchema.hand.clear();

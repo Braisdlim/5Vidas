@@ -41,6 +41,8 @@ export interface Player {
     color: string;
     /** Is this player a bot? */
     isBot: boolean;
+    /** Is this player the room host? */
+    isHost?: boolean;
 }
 
 /** Game phase / state machine states */

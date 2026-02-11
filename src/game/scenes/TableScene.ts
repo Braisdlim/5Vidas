@@ -1,6 +1,5 @@
 import { Scene } from 'phaser';
 import { EventBus } from '../EventBus';
-import { GAME_DIMENSIONS } from '../../engine/constants';
 import { useGameStore } from '../../store/gameStore';
 import { gameController } from '../GameController';
 import type { GameState } from '../../engine/types';
@@ -59,10 +58,10 @@ export class TableScene extends Scene {
         this.drawTable();
 
         // ── Trick Pile ──
-        this.trickPile = new TrickPile(this, GAME_DIMENSIONS.WIDTH / 2, GAME_DIMENSIONS.HEIGHT / 2);
+        this.trickPile = new TrickPile(this, this.scale.width / 2, this.scale.height / 2);
 
         // ── Hand ──
-        this.hand = new Hand(this, GAME_DIMENSIONS.WIDTH / 2, GAME_DIMENSIONS.HEIGHT - 50);
+        this.hand = new Hand(this, this.scale.width / 2, this.scale.height - 50);
         this.add.existing(this.hand);
 
         // ── Particle Manager ──
@@ -78,11 +77,98 @@ export class TableScene extends Scene {
         // ── Central play area indicator ──
         this.drawPlayArea();
 
+        // ── Scoreboard toggle button (inside canvas) ──
+        this.createScoreboardButton();
+
+        // ── Resize listener for fullscreen ──
+        this.scale.on('resize', this.handleResize, this);
+
         EventBus.emit('current-scene-ready', this);
 
         // Start game for testing if no state
         if (!useGameStore.getState().gameState) {
             gameController.startGame(['Tú', 'Bot 1', 'Bot 2', 'Bot 3']);
+        }
+    }
+
+    private scoreboardButton?: Phaser.GameObjects.Container;
+
+    private createScoreboardButton() {
+        // Container for the button (top-right corner)
+        this.scoreboardButton = this.add.container(this.scale.width - 40, 40);
+
+        // Background circle
+        const bg = this.add.circle(0, 0, 28, 0x0d1f15, 0.95);
+        bg.setStrokeStyle(2, 0xe6b800);
+
+        // Icon text (emoji)
+        const icon = this.add.text(0, 0, '📊', {
+            fontSize: '24px'
+        });
+        icon.setOrigin(0.5);
+
+        this.scoreboardButton.add([bg, icon]);
+        this.scoreboardButton.setSize(56, 56);
+        this.scoreboardButton.setInteractive({ useHandCursor: true });
+
+        // Click handler - emit event to React
+        this.scoreboardButton.on('pointerdown', () => {
+            EventBus.emit('toggle-scoreboard');
+        });
+
+        // Hover effects
+        this.scoreboardButton.on('pointerover', () => {
+            this.tweens.add({
+                targets: bg,
+                scale: 1.1,
+                duration: 150,
+                ease: 'Back.easeOut'
+            });
+        });
+
+        this.scoreboardButton.on('pointerout', () => {
+            this.tweens.add({
+                targets: bg,
+                scale: 1.0,
+                duration: 150,
+                ease: 'Quad.easeOut'
+            });
+        });
+
+        // High depth to stay on top
+        this.scoreboardButton.setDepth(1000);
+    }
+
+    private handleResize(gameSize: Phaser.Structs.Size) {
+        const { width, height } = gameSize;
+
+        // Redraw background and play area
+        this.drawTable();
+        this.drawPlayArea();
+
+        // Reposicionar botón scoreboard
+        if (this.scoreboardButton) {
+            this.scoreboardButton.setPosition(width - 40, 40);
+        }
+
+        // Reposicionar mi mano
+        if (this.hand) {
+            this.hand.setPosition(width / 2, height - 50);
+            // Force layout update if Hand has resize method?
+            // Hand doesn't have explicit resize, but its internal layout might need refresh
+            // For now just position is enough as cards are relative to container
+        }
+
+        // Reposicionar TrickPile
+        if (this.trickPile) {
+            this.trickPile.setPosition(width / 2, height / 2);
+        }
+
+        // Reposicionar Oponentes
+        // Necesitamos el orden original. Lo más fácil es re-ejecutar updateState con el estado actual
+        const state = useGameStore.getState().gameState;
+        if (state) {
+            this.updateState(state);
         }
     }
 
@@ -105,14 +191,11 @@ export class TableScene extends Scene {
         this.opponents.clear();
 
         opponents.forEach((op, index) => {
-            // Calculate position based on index relative to me
-            // precise logic depends on max players. For now, distributed in top arc.
-            const totalOps = opponents.length;
-            const x = (GAME_DIMENSIONS.WIDTH / (totalOps + 1)) * (index + 1);
-            const y = 80; // Top area
+            // Get position around the table
+            const pos = this.getOpponentPosition(index, opponents.length);
 
-            const hand = new OpponentHand(this, x, y);
-            hand.update(op.handSize, op.name, op.isConnected);
+            const hand = new OpponentHand(this, pos.x, pos.y);
+            hand.update(op.handSize, op.name, op.isConnected, op.isEliminated);
             this.opponents.set(op.id, hand);
             this.add.existing(hand);
         });
@@ -143,7 +226,7 @@ export class TableScene extends Scene {
 
         // Me
         if (playerId === myPlayerId) {
-            return { x: GAME_DIMENSIONS.WIDTH / 2, y: GAME_DIMENSIONS.HEIGHT - 100 };
+            return { x: this.scale.width / 2, y: this.scale.height - 100 };
         }
 
         // Opponents
@@ -153,46 +236,129 @@ export class TableScene extends Scene {
         }
 
         // Fallback
-        return { x: GAME_DIMENSIONS.WIDTH / 2, y: GAME_DIMENSIONS.HEIGHT / 2 };
+        return { x: this.scale.width / 2, y: this.scale.height / 2 };
+    }
+
+    private getOpponentPosition(index: number, total: number): { x: number, y: number } {
+        const WIDTH = this.scale.width;
+        const HEIGHT = this.scale.height;
+        const cx = WIDTH / 2;
+        const cy = HEIGHT / 2;
+
+        // Radii for the ellipse (padding from edges)
+        const PAD_X = 80;
+        const PAD_Y = 60;
+        const rx = (WIDTH / 2) - PAD_X;
+        const ry = (HEIGHT / 2) - PAD_Y;
+
+        // Strategy: Dynamic Arc
+        // Me is at 90deg (Bottom). Opponents distributed from Left (approx 190) to Right (approx 350).
+
+        if (total === 1) {
+            // Single opponent: Top Center (270deg)
+            return { x: cx, y: cy - ry };
+        }
+
+        // For 2+ opponents, distribute evenly in the arc
+        // index 0 -> ARC_START
+        // index total-1 -> ARC_END
+        const angleDeg = 190 + ((350 - 190) / (total > 1 ? total - 1 : 1)) * index;
+
+        const angleRad = Phaser.Math.DegToRad(angleDeg);
+
+        return {
+            x: cx + rx * Math.cos(angleRad),
+            y: cy + ry * Math.sin(angleRad)
+        };
     }
 
     private drawTable() {
-        const { WIDTH, HEIGHT } = GAME_DIMENSIONS;
-        const gfx = this.add.graphics();
+        const WIDTH = this.scale.width;
+        const HEIGHT = this.scale.height;
 
-        const centerColor = 0x1e4632;
-        const cornerColor = 0x05100a;
+        // Clear previous graphics if any (though usually we just create new ones,
+        // better to group them in a container or clear specifically if redrawing.
+        // For now, simpler to just draw. But on resize we need to clear!)
+
+        // Buscar si ya existen graphics de fondo para eliminarlos?
+        // En resize event llamaremos a this.scene.restart() o similar? 
+        // No, mejor tener referencias a los graphics y limpiar.
+
+        // Simplemente creamos nuevos graphics, pero Phaser acumulará objetos si llamamos repetidamente.
+        // Solución: Asignar a propiedades de clase y destruir si existen.
+        if (this.backgroundGraphics) this.backgroundGraphics.destroy();
+
+        this.backgroundGraphics = this.add.graphics();
+        const gfx = this.backgroundGraphics;
+
+        // Darker corners, lighter center for premium feel
+        const centerColor = 0x2a5a3f;
+        const cornerColor = 0x030a06;
 
         gfx.fillGradientStyle(cornerColor, cornerColor, cornerColor, cornerColor, 1);
         gfx.fillRect(0, 0, WIDTH, HEIGHT);
 
-        const light = this.add.graphics();
-        light.fillStyle(centerColor, 1);
-        light.fillCircle(WIDTH / 2, HEIGHT / 2 - 50, 450);
-        light.setBlendMode(Phaser.BlendModes.ADD);
-        light.setAlpha(0.2);
+        // Stronger radial light in center
+        gfx.fillStyle(centerColor, 0.35);
+        gfx.fillCircle(WIDTH / 2, HEIGHT / 2 - 50, 500);
 
-        gfx.lineStyle(2, 0xe6b800, 0.8);
+        // Vignette effect
+        // Note: Multiply blend mode isn't easily available on single Graphics fill
+        // So we just use a dark overlay
+        gfx.fillStyle(0x000000, 0.15);
+        gfx.fillRect(0, 0, WIDTH, HEIGHT);
+
+        // Gold border (premium) - responsive
+
+        // Gold border (premium) - responsive
+        gfx.lineStyle(2, 0xe6b800, 0.9);
         gfx.strokeRect(10, 10, WIDTH - 20, HEIGHT - 20);
 
-        gfx.lineStyle(1, 0xe6b800, 0.3);
+        gfx.lineStyle(1, 0xe6b800, 0.4);
         gfx.strokeRect(14, 14, WIDTH - 28, HEIGHT - 28);
+
+        gfx.setDepth(-100); // Send to back
     }
 
+    private backgroundGraphics?: Phaser.GameObjects.Graphics;
+    private playAreaGraphics?: Phaser.GameObjects.Graphics;
+    private playAreaLabel?: Phaser.GameObjects.Text;
+
     private drawPlayArea() {
-        const { WIDTH, HEIGHT } = GAME_DIMENSIONS;
+        const WIDTH = this.scale.width;
+        const HEIGHT = this.scale.height;
         const cx = WIDTH / 2;
-        const cy = HEIGHT / 2 - 40;
+        const cy = HEIGHT / 2 - 20; // Slightly higher center
 
-        const gfx = this.add.graphics();
-        gfx.lineStyle(1, 0xffffff, 0.1);
-        gfx.strokeRoundedRect(cx - 130, cy - 90, 260, 180, 24);
+        if (this.playAreaGraphics) this.playAreaGraphics.destroy();
+        if (this.playAreaLabel) this.playAreaLabel.destroy();
 
-        gfx.lineStyle(2, 0xe6b800, 0.4);
-        gfx.beginPath(); gfx.moveTo(cx - 120, cy - 90); gfx.lineTo(cx - 130, cy - 90); gfx.lineTo(cx - 130, cy - 80); gfx.strokePath();
-        gfx.beginPath(); gfx.moveTo(cx + 120, cy - 90); gfx.lineTo(cx + 130, cy - 90); gfx.lineTo(cx + 130, cy - 80); gfx.strokePath();
-        gfx.beginPath(); gfx.moveTo(cx - 120, cy + 90); gfx.lineTo(cx - 130, cy + 90); gfx.lineTo(cx - 130, cy + 80); gfx.strokePath();
-        gfx.beginPath(); gfx.moveTo(cx + 120, cy + 90); gfx.lineTo(cx + 130, cy + 90); gfx.lineTo(cx + 130, cy + 80); gfx.strokePath();
+        this.playAreaGraphics = this.add.graphics();
+        const gfx = this.playAreaGraphics;
+
+        // Outer circle with subtle fill
+        gfx.fillStyle(0x1a3a2a, 0.2);
+        gfx.fillCircle(cx, cy, 160);
+
+        // Main circle border (gold)
+        gfx.lineStyle(3, 0xe6b800, 0.5);
+        gfx.strokeCircle(cx, cy, 160);
+
+        // Inner circle border (subtle)
+        gfx.lineStyle(1, 0xe6b800, 0.25);
+        gfx.strokeCircle(cx, cy, 130);
+
+        gfx.setDepth(-50); // Behind cards but above table
+
+        // Optional: "BAZA" label
+        this.playAreaLabel = this.add.text(cx, cy - 110, 'BAZA', {
+            fontFamily: 'Cinzel, serif',
+            fontSize: '14px',
+            color: '#E6B800'
+        });
+        this.playAreaLabel.setOrigin(0.5);
+        this.playAreaLabel.setAlpha(0.4);
+        this.playAreaLabel.setDepth(-50);
     }
 
     shutdown() {

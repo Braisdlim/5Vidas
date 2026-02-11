@@ -13,6 +13,8 @@ export class Hand extends GameObjects.Container {
     constructor(scene: Scene, x: number, y: number) {
         super(scene, x, y);
         scene.add.existing(this);
+        // Ensure container itself doesn't block inputs unless needed, but here we set interactive on children.
+        // Actually, let's sort current cards by depth in update?
     }
 
     public updateHand(handData: Card[]) {
@@ -69,6 +71,18 @@ export class Hand extends GameObjects.Container {
         const textureKey = `card-${textureId}`;
 
         if (this.scene.textures.exists(textureKey)) {
+            // Add shadow graphic for depth
+            const shadow = new GameObjects.Ellipse(
+                this.scene,
+                2,
+                6,
+                this.cardWidth * 0.9,
+                this.cardHeight * 0.15,
+                0x000000,
+                0.3
+            );
+            container.add(shadow);
+
             const sprite = new GameObjects.Sprite(this.scene, 0, 0, textureKey);
             sprite.setDisplaySize(this.cardWidth, this.cardHeight);
 
@@ -91,11 +105,15 @@ export class Hand extends GameObjects.Container {
         }
 
         // Interaction
-        container.setInteractive(new Phaser.Geom.Rectangle(-this.cardWidth / 2, -this.cardHeight / 2, this.cardWidth, this.cardHeight), Phaser.Geom.Rectangle.Contains);
+        // Full card hit area
+        const hitArea = new Phaser.Geom.Rectangle(-this.cardWidth / 2, -this.cardHeight / 2, this.cardWidth, this.cardHeight);
+        container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
 
         container.on('pointerdown', () => {
             this.handleCardClick(cardData.id);
         });
+
+        // Removed hover effects for mobile optimization
 
         container.setData('id', cardData.id);
         return container;
@@ -157,8 +175,16 @@ export class Hand extends GameObjects.Container {
                     ease: 'Quad.easeOut'
                 });
 
-                // Depth sorting
-                // this.bringToTop(card); // Bring selected to very top?
+                // Depth sorting logic:
+                // Standard Fan: Index order (0 at bottom, N at top).
+                // But we want to preserve this unless hovered.
+                // Since layoutCards is called on pointerout, it restores order.
+                // We just need to ensure `this.sort` or strictly `add` order matches index.
+                // Container.sort is expensive? We can just sendToBack/bringToTop loop?
+                // Actually, just iterating and setting depth is enough if we use setDepth?
+                // Container children render order is key.
+                this.moveTo(card, i); // Ensure z-index matches index
+
                 if (c.id === this.selectedCardId) {
                     this.bringToTop(card);
                 }

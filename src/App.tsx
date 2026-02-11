@@ -1,16 +1,19 @@
 import { useRef, useState } from 'react';
 import { IRefPhaserGame, PhaserGame } from './PhaserGame';
 import { GameHUD } from './components/GameHUD';
+import { LobbyUI } from './components/LobbyUI';
 import { gameController } from './game/GameController';
 import { multiplayer } from './network/MultiplayerClient';
+import { useGameStore } from './store/gameStore';
 
 import { audioManager } from './engine/AudioManager';
 
-type GameScreen = 'menu' | 'game';
+type GameScreen = 'menu' | 'lobby' | 'game' | 'setup_local';
 
 function App() {
     const phaserRef = useRef<IRefPhaserGame | null>(null);
     const [screen, setScreen] = useState<GameScreen>('menu');
+    const [botCount, setBotCount] = useState(3);
     const [playerName, setPlayerName] = useState(() => {
         try {
             const stored = localStorage.getItem('cinco-vidas-player');
@@ -22,36 +25,96 @@ function App() {
         return '';
     });
 
+    // Global Store State
+    const gameState = useGameStore(state => state.gameState);
+    const myPlayerId = useGameStore(state => state.myPlayerId);
+
+    // Lobby UI Local State
+    const [lobbyState, setLobbyState] = useState<{
+        code?: string;
+        isConnecting: boolean;
+        error?: string;
+    }>({ isConnecting: false });
+
+    // Computed Lobby Data
+    const lobbyPlayers = gameState?.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        isHost: !!p.isHost,
+        isBot: !!p.isBot
+    })) || [];
+
+    const isMeHost = gameState?.players.find(p => p.id === myPlayerId)?.isHost || false;
+
+    // Auto-switch to game when phase changes
+    if (screen === 'lobby' && gameState?.phase && gameState.phase !== 'lobby') {
+        setScreen('game');
+    }
+
     const handleStartGame = () => {
         // Local Play
         const playerId = getOrCreatePlayerId();
-        // Init controller
         gameController.init(playerId);
         gameController.setOnlineMode(false);
-        gameController.startGame([playerName || 'Jugador', 'Bot 1', 'Bot 2', 'Bot 3']);
+
+        // Generate bots
+        const bots = Array.from({ length: botCount }, (_, i) => `Bot ${i + 1}`);
+        gameController.startGame([playerName || 'Jugador', ...bots]);
 
         setScreen('game');
     };
 
-    const handleMultiplayer = async () => {
+    // ── LOBBY HANDLERS ──
+    const handleCreateRoom = async (options: { maxPlayers: number }) => {
+        setLobbyState(prev => ({ ...prev, isConnecting: true, error: undefined }));
         const playerId = getOrCreatePlayerId();
         gameController.init(playerId);
-        gameController.setOnlineMode(true); // Prepare for online
+        gameController.setOnlineMode(true);
 
         try {
-            // Join or Create "cinco_vidas" room automatically
-            // This ensures players land in the same room for testing
-            await multiplayer.joinOrCreateRoom("cinco_vidas", { name: playerName });
-            setScreen('game');
+            const roomId = await multiplayer.createPrivateRoom({
+                name: playerName || 'Anfitrión',
+                maxClients: options.maxPlayers
+            });
+            setLobbyState(prev => ({
+                ...prev,
+                code: roomId,
+                isConnecting: false
+            }));
+            // Stay in 'lobby', LobbyUI handles 'host' view via roomCode prop
         } catch (e) {
             console.error(e);
-            alert("Error al conectar: " + e);
+            setLobbyState(prev => ({ ...prev, isConnecting: false, error: "Error al crear sala" }));
             gameController.setOnlineMode(false);
         }
     };
 
+    const handleJoinRoom = async (code: string) => {
+        setLobbyState(prev => ({ ...prev, isConnecting: true, error: undefined }));
+        const playerId = getOrCreatePlayerId();
+        gameController.init(playerId);
+        gameController.setOnlineMode(true);
+
+        try {
+            const roomId = await multiplayer.joinPrivateRoom(code, { name: playerName || 'Jugador' });
+            setLobbyState(prev => ({
+                ...prev,
+                code: roomId,
+                isConnecting: false
+            }));
+        } catch (e) {
+            console.error(e);
+            setLobbyState(prev => ({ ...prev, isConnecting: false, error: "Sala no encontrada o llena" }));
+            gameController.setOnlineMode(false);
+        }
+    };
+
+    const handleLobbyStartGame = () => {
+        multiplayer.send("start_game");
+    };
+
     const currentScene = (_scene: Phaser.Scene) => {
-        // Scene callback - can be used for React<->Phaser communication
+        // Scene callback
     };
 
     if (screen === 'menu') {
@@ -80,22 +143,22 @@ function App() {
                             className="btn btn-primary mt-sm"
                             onClick={() => {
                                 audioManager.playClick();
-                                handleStartGame();
+                                setScreen('setup_local');
                             }}
                             style={{ width: '100%', padding: '14px', fontSize: '16px' }}
                         >
-                            🃏 Jugar vs Bots
+                            🃏 Vs Bots (Local)
                         </button>
 
                         <button
                             className="btn btn-secondary mt-sm"
                             onClick={() => {
                                 audioManager.playClick();
-                                handleMultiplayer();
+                                setScreen('lobby');
                             }}
                             style={{ width: '100%', padding: '12px' }}
                         >
-                            🌐 Crear Sala (Online)
+                            🌐 Multijugador Online
                         </button>
 
                         <p className="text-muted" style={{ fontSize: '11px', marginTop: '24px' }}>
@@ -103,8 +166,83 @@ function App() {
                                 style={{ color: '#8faa9a', textDecoration: 'none' }}
                                 target="_blank" rel="noopener">
                                 jcanabal
-                            </a> · v0.1.0
+                            </a> · v0.2.0
                         </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (screen === 'lobby') {
+        return (
+            <div id="app">
+                <div className="overlay">
+                    <LobbyUI
+                        onBack={() => {
+                            multiplayer.leave();
+                            setLobbyState({ isConnecting: false });
+                            setScreen('menu');
+                        }}
+                        onCreateRoom={handleCreateRoom}
+                        onJoinRoom={handleJoinRoom}
+                        onStartGame={handleLobbyStartGame}
+                        roomCode={lobbyState.code}
+                        players={lobbyPlayers}
+                        isConnecting={lobbyState.isConnecting}
+                        error={lobbyState.error}
+                        isHost={isMeHost}
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    if (screen === 'setup_local') {
+        return (
+            <div id="app">
+                <div className="overlay">
+                    <div className="panel flex-col gap-md fade-in" style={{ textAlign: 'center', width: '90%', maxWidth: '360px' }}>
+                        <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>PARTIDA LOCAL</h2>
+
+                        <div style={{ margin: '24px 0', width: '100%' }}>
+                            <label style={{ display: 'block', marginBottom: '12px', color: '#eee' }}>
+                                Oponentes (Bots): <span style={{ color: 'var(--color-gold)', fontWeight: 'bold', fontSize: '18px' }}>{botCount}</span>
+                            </label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="7"
+                                value={botCount}
+                                onChange={(e) => setBotCount(parseInt(e.target.value))}
+                                style={{ width: '100%', accentColor: 'var(--color-gold)' }}
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                                <span>1</span>
+                                <span>7</span>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
+                            <button
+                                className="btn btn-primary"
+                                onClick={() => {
+                                    audioManager.playClick();
+                                    handleStartGame();
+                                }}
+                            >
+                                JUGAR
+                            </button>
+                            <button
+                                className="btn-text"
+                                onClick={() => {
+                                    audioManager.playClick();
+                                    setScreen('menu');
+                                }}
+                            >
+                                Cancelar
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

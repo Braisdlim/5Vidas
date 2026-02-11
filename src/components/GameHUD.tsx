@@ -1,7 +1,8 @@
 import { useGameStore } from '../store/gameStore';
 import { gameController } from '../game/GameController';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { audioManager } from '../engine/AudioManager';
+import { EventBus } from '../game/EventBus';
 
 export function GameHUD() {
     // Subscribe only to relevant state parts to avoid excessive re-renders
@@ -20,6 +21,39 @@ export function GameHUD() {
 
     // Prediction handling
     const [, setPrediction] = useState<number | null>(null);
+
+    // Scoreboard panel toggle for mobile
+    const [isPanelOpen, setIsPanelOpen] = useState(false);
+
+    // Mobile detection
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+    // Auto-open panel when prediction phase starts
+    useEffect(() => {
+        if (phase === 'predicting') {
+            setIsPanelOpen(true);
+        }
+    }, [phase]);
+
+    // Handle window resize for mobile detection
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // Listen to scoreboard toggle event from Phaser button
+    useEffect(() => {
+        const handleToggle = () => {
+            setIsPanelOpen(prev => !prev);
+        };
+
+        EventBus.on('toggle-scoreboard', handleToggle);
+
+        return () => {
+            EventBus.off('toggle-scoreboard', handleToggle);
+        };
+    }, []);
 
     const handlePredict = (val: number) => {
         audioManager.playClick();
@@ -98,58 +132,180 @@ export function GameHUD() {
                 </div>
             )}
 
+
+
+
+            {/* ── PERSISTENT PREDICTION PANEL ── */}
+            {(phase === 'predicting' || phase === 'playing') &&
+                !(isMobile && isMyTurn && phase === 'predicting') && (
+                    <div
+                        className="hud-info-panel"
+                        style={{
+                            position: 'absolute', // Inside relative #app
+                            top: '80px',
+                            right: isPanelOpen ? '20px' : '-220px',
+                            flexDirection: 'column',
+                            padding: '16px',
+                            alignItems: 'flex-start',
+                            background: 'rgba(13, 31, 21, 0.95)',
+                            border: '1px solid var(--color-gold)',
+                            boxShadow: '0 8px 16px rgba(0,0,0,0.6)',
+                            minWidth: '180px',
+                            transition: 'right 0.3s ease',
+                            zIndex: 99
+                        }}
+                    >
+                        <span className="text-gold" style={{
+                            fontSize: '14px',
+                            marginBottom: '8px',
+                            borderBottom: '1px solid #444',
+                            width: '100%',
+                            paddingBottom: '4px',
+                            fontWeight: 'bold'
+                        }}>
+                            {phase === 'predicting' ? 'Predicciones' : 'Marcador'}
+                        </span>
+                        {players.map(p => {
+                            const isComplete = phase === 'playing' && p.prediction >= 0;
+                            const isCorrect = isComplete && p.prediction === p.tricksWon;
+
+                            return (
+                                <div key={p.id} style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    fontSize: '13px',
+                                    marginBottom: '6px',
+                                    opacity: p.isEliminated ? 0.5 : (p.prediction >= 0 ? 1 : 0.5),
+                                    transition: 'all 0.2s ease'
+                                }}>
+                                    <span style={{
+                                        color: p.isEliminated ? '#666' : '#eee',
+                                        fontWeight: p.id === myPlayerId ? 'bold' : 'normal',
+                                        textShadow: p.id === myPlayerId ? '0 0 8px rgba(230,184,0,0.5)' : 'none'
+                                    }}>
+                                        {p.name} {p.isEliminated ? '💀' : ''} {p.id === activePlayerIndex?.toString() || (players.indexOf(p) === activePlayerIndex) ? '⏳' : ''}
+                                    </span>
+                                    <span style={{
+                                        fontWeight: 'bold',
+                                        color: p.isEliminated ? '#666' : (isCorrect ? '#4ade80' : (p.prediction >= 0 ? 'var(--color-gold)' : '#888')),
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px'
+                                    }}>
+                                        {p.isEliminated ? '—' : (
+                                            phase === 'playing' && p.prediction >= 0 ? (
+                                                <>
+                                                    {p.tricksWon} / {p.prediction} {isCorrect ? '✓' : ''}
+                                                </>
+                                            ) : (
+                                                p.prediction >= 0 ? p.prediction : '-'
+                                            )
+                                        )}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+
             {/* ── PREDICTION MODAL ── */}
             {phase === 'predicting' && (
                 <>
-                    {/* Live Prediction Status Panel (Always visible during predicting) */}
-                    <div className="hud-info-panel" style={{ position: 'absolute', top: '80px', right: '20px', flexDirection: 'column', padding: '12px', alignItems: 'flex-start', background: 'rgba(0,0,0,0.6)' }}>
-                        <span className="text-gold" style={{ fontSize: '12px', marginBottom: '8px' }}>Predicciones:</span>
-                        {players.map(p => (
-                            <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '12px', marginBottom: '4px', opacity: p.prediction >= 0 ? 1 : 0.5 }}>
-                                <span style={{ color: p.isEliminated ? '#444' : '#fff' }}>{p.name}:</span>
-                                <span style={{ fontWeight: 'bold', color: p.prediction >= 0 ? 'var(--color-gold)' : '#aaa' }}>
-                                    {p.prediction >= 0 ? p.prediction : '-'}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {isMyTurn && (
-                        <div className="overlay" style={{ background: 'rgba(0,0,0,0)', backdropFilter: 'none', pointerEvents: 'auto', alignItems: 'flex-start', paddingTop: '20vh' }}>
-                            <div className="panel flex-col flex-center" style={{ background: 'rgba(13, 31, 21, 0.95)', border: '2px solid var(--color-gold)', boxShadow: '0 0 20px rgba(0,0,0,0.8)' }}>
-                                <h2 className="mb-md" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>¿Cuántas bazas harás?</h2>
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', width: '100%' }}>
-                                    {Array.from({ length: (cardsThisRound || 0) + 1 }).map((_, i) => {
-                                        // "Sandwich Rule" / Forbidden Prediction Logic
-                                        // If I am the LAST player to predict, the sum of predictions cannot equal cardsThisRound.
+                    {isMyTurn && !myPlayer?.isEliminated && (
+                        /* Centered compact modal */
+                        <div className="overlay" style={{
+                            position: 'absolute', // Override fixed
+                            background: 'rgba(0,0,0,0.4)',
+                            backdropFilter: 'none',
+                            pointerEvents: 'auto',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: '20px'
+                        }}>
+                            <div className="panel flex-col flex-center" style={{
+                                background: 'rgba(13, 31, 21, 0.98)',
+                                border: '2px solid var(--color-gold)',
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.8)',
+                                maxWidth: '400px',
+                                width: isMobile ? '90%' : 'auto',
+                                borderRadius: '12px',
+                                padding: isMobile ? '16px' : '20px',
+                                maxHeight: '80vh',
+                                overflowY: 'auto'
+                            }}>
+                                <h2 style={{
+                                    fontSize: isMobile ? '16px' : '18px',
+                                    marginBottom: '12px',
+                                    textAlign: 'center',
+                                    color: '#E6B800',
+                                    fontWeight: 'bold',
+                                    textShadow: '0 2px 4px rgba(0,0,0,0.8)'
+                                }}>
+                                    ¿Cuántas bazas?
+                                </h2>
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(4, 1fr)',
+                                    gap: '8px',
+                                    width: '100%'
+                                }}>
+                                    {(() => {
+                                        // "Sandwich Rule" Logic
                                         const totalPredictions = players.reduce((sum, p) => sum + (p.prediction >= 0 ? p.prediction : 0), 0);
                                         const pendingPlayers = players.filter(p => p.prediction === -1).length;
-                                        // pendingPlayers includes ME (since I haven't predicted yet).
-                                        // So if pendingPlayers === 1, I am the last one.
+                                        // If I am active, I am pending. If pending == 1, I am the last one.
                                         const isLast = pendingPlayers === 1;
-                                        const forbidden = isLast ? ((cardsThisRound || 0) - totalPredictions) : -1;
-                                        const isForbidden = i === forbidden;
+                                        const calculatedForbidden = isLast ? ((cardsThisRound || 0) - totalPredictions) : -1;
 
                                         return (
-                                            <button
-                                                key={i}
-                                                className="btn btn-secondary"
-                                                onClick={() => !isForbidden && handlePredict(i)}
-                                                disabled={isForbidden}
-                                                style={{
-                                                    padding: '16px',
-                                                    fontSize: '18px',
-                                                    opacity: isForbidden ? 0.3 : 1,
-                                                    cursor: isForbidden ? 'not-allowed' : 'pointer',
-                                                    background: isForbidden ? '#333' : undefined,
-                                                    textDecoration: isForbidden ? 'line-through' : 'none'
-                                                }}
-                                                title={isForbidden ? "Regla: La suma no puede igualar las cartas" : ""}
-                                            >
-                                                {i}
-                                            </button>
+                                            <>
+                                                {Array.from({ length: (cardsThisRound || 0) + 1 }).map((_, i) => {
+                                                    const isForbidden = i === calculatedForbidden;
+                                                    return (
+                                                        <button
+                                                            key={i}
+                                                            className="btn"
+                                                            onClick={() => !isForbidden && handlePredict(i)}
+                                                            disabled={isForbidden}
+                                                            style={{
+                                                                padding: '10px 8px',
+                                                                fontSize: '18px',
+                                                                minHeight: '44px',
+                                                                minWidth: '44px',
+                                                                background: isForbidden ? '#222' : 'linear-gradient(135deg, #444 0%, #222 100%)',
+                                                                color: isForbidden ? '#555' : '#fff',
+                                                                border: isForbidden ? '1px dashed #555' : '1px solid #666',
+                                                                cursor: isForbidden ? 'not-allowed' : 'pointer',
+                                                                textDecoration: isForbidden ? 'line-through' : 'none',
+                                                                opacity: isForbidden ? 0.6 : 1,
+                                                                boxShadow: isForbidden ? 'none' : '0 4px 0 #111',
+                                                                transition: 'all 0.2s ease',
+                                                                ...(!isForbidden ? { border: '1px solid var(--color-gold-light)', color: 'var(--color-gold)' } : {})
+                                                            }}
+                                                            title={isForbidden ? "Regla: La suma no puede igualar las cartas" : ""}
+                                                        >
+                                                            {i}
+                                                        </button>
+                                                    );
+                                                })}
+                                                {calculatedForbidden !== -1 && calculatedForbidden >= 0 && calculatedForbidden <= (cardsThisRound || 0) && (
+                                                    <p style={{
+                                                        fontSize: '11px',
+                                                        color: '#ff6b6b',
+                                                        width: '100%',
+                                                        textAlign: 'center',
+                                                        marginTop: '8px',
+                                                        gridColumn: '1 / -1',
+                                                        lineHeight: '1.3'
+                                                    }}>
+                                                        ⚠️ {calculatedForbidden} bloqueado (Sandwich)
+                                                    </p>
+                                                )}
+                                            </>
                                         );
-                                    })}
+                                    })()}
                                 </div>
                             </div>
                         </div>

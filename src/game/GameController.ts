@@ -12,6 +12,7 @@ import type { GameState, Player } from '../engine/types';
 import { multiplayer } from '../network/MultiplayerClient';
 import { audioManager } from '../engine/AudioManager';
 import { EventBus } from './EventBus';
+import { calculateBotPrediction, calculateBotPlay } from './ai/BotLogic';
 
 class GameController {
     private static instance: GameController;
@@ -77,6 +78,10 @@ class GameController {
             winnerId: null,
             turnTimer: GAME_CONFIG.TURN_TIMER_SECONDS
         };
+
+        // Randomize initial dealer so it's not always P3
+        // If players=4, dealerIndex=0..3
+        this.state.dealerIndex = Math.floor(Math.random() * players.length);
 
         // Start first round
         this.advanceRound();
@@ -229,23 +234,52 @@ class GameController {
 
         const activeIdx = this.state.activePlayerIndex;
         // In local mode, force play/prediction for active player
-        // (Even if it's the human player - AFK logic)
+        // (Even if it's the human player - AFK logic, though usually for bots)
+
+        const player = this.state.players[activeIdx];
+        if (!player) return;
 
         if (this.state.phase === 'predicting') {
-            // Default prediction: 0
-            const result = makePrediction(this.state, activeIdx, 0);
+            // Intelligent Prediction
+            let prediction = 0;
+            if (player.isBot) {
+                prediction = calculateBotPrediction(
+                    player.hand,
+                    this.state.cardsThisRound,
+                    this.state.players,
+                    this.state.dealerIndex,
+                    activeIdx
+                );
+            } else {
+                // AFK human: 0
+                prediction = 0;
+            }
+
+            const result = makePrediction(this.state, activeIdx, prediction);
             if (result.success && result.newState) {
                 this.updateState(result.newState);
                 this.checkPhaseTransition();
             }
         } else if (this.state.phase === 'playing') {
-            // Play random valid card
-            const player = this.state.players[activeIdx];
+            // Intelligent Play
             const validIndices = getValidMoves(player.hand, this.state.currentTrick);
 
-            const choice = validIndices.length > 0
-                ? validIndices[Math.floor(Math.random() * validIndices.length)]
-                : 0;
+            let choice = 0;
+            if (validIndices.length > 0) {
+                if (player.isBot) {
+                    // Map valid indices to actual indices in hand? 
+                    // calculateBotPlay expects indices.
+                    // But wait, calculateBotPlay logic was: 
+                    // it takes hand and validIndices array.
+                    // Let's refine calculateBotPlay signature or usage.
+                    // Actually, my calculateBotPlay implementation took (hand, currentTrick, validIndices).
+                    // And returned the INDEX of the card to play.
+                    choice = calculateBotPlay(player.hand, this.state.currentTrick, validIndices);
+                } else {
+                    // AFK human: random
+                    choice = validIndices[Math.floor(Math.random() * validIndices.length)];
+                }
+            }
 
             const result = playCard(this.state, activeIdx, choice);
             if (result.success && result.newState) {
