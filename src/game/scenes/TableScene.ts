@@ -186,18 +186,37 @@ export class TableScene extends Scene {
         // Create opponent hands
         const opponents = state.players.filter(p => p.id !== myId);
 
-        // Clear existing
-        this.opponents.forEach(h => h.destroy());
-        this.opponents.clear();
+        // Identify current opponent IDs
+        const currentOpponentIds = new Set(opponents.map(p => p.id));
 
+        // Remove opponents that are no longer in the game
+        for (const [id, hand] of this.opponents.entries()) {
+            if (!currentOpponentIds.has(id)) {
+                hand.destroy();
+                this.opponents.delete(id);
+            }
+        }
+
+        // Update or Create opponents
         opponents.forEach((op, index) => {
-            // Get position around the table
             const pos = this.getOpponentPosition(index, opponents.length);
 
-            const hand = new OpponentHand(this, pos.x, pos.y);
+            let hand = this.opponents.get(op.id);
+            if (!hand) {
+                // New opponent
+                hand = new OpponentHand(this, pos.x, pos.y);
+                this.add.existing(hand);
+                this.opponents.set(op.id, hand);
+            } else {
+                // Existing opponent: update position (in case of resize or player count change)
+                hand.setPosition(pos.x, pos.y);
+                // Ensure it's on top if needed, or just let strict ordering handle it
+                // this.children.bringToTop(hand); 
+            }
+
+            // Update internal state (cards, name, status)
+            // efficient update inside OpponentHand handles diffing
             hand.update(op.handSize, op.name, op.isConnected, op.isEliminated);
-            this.opponents.set(op.id, hand);
-            this.add.existing(hand);
         });
 
         // Cleanup opponents if left? (Not needed for fixed room size usually)
@@ -295,20 +314,19 @@ export class TableScene extends Scene {
         const centerColor = 0x2a5a3f;
         const cornerColor = 0x030a06;
 
-        gfx.fillGradientStyle(cornerColor, cornerColor, cornerColor, cornerColor, 1);
+        // Use solid fill first to avoid gradient triangulation artifacts
+        gfx.fillStyle(cornerColor, 1);
         gfx.fillRect(0, 0, WIDTH, HEIGHT);
 
-        // Stronger radial light in center
+        // Stronger radial light in center (increased radius)
         gfx.fillStyle(centerColor, 0.35);
-        gfx.fillCircle(WIDTH / 2, HEIGHT / 2 - 50, 500);
+        gfx.fillCircle(WIDTH / 2, HEIGHT / 2 - 50, Math.max(WIDTH, HEIGHT) * 0.8);
 
         // Vignette effect
         // Note: Multiply blend mode isn't easily available on single Graphics fill
         // So we just use a dark overlay
         gfx.fillStyle(0x000000, 0.15);
         gfx.fillRect(0, 0, WIDTH, HEIGHT);
-
-        // Gold border (premium) - responsive
 
         // Gold border (premium) - responsive
         gfx.lineStyle(2, 0xe6b800, 0.9);
@@ -349,16 +367,6 @@ export class TableScene extends Scene {
         gfx.strokeCircle(cx, cy, 130);
 
         gfx.setDepth(-50); // Behind cards but above table
-
-        // Optional: "BAZA" label
-        this.playAreaLabel = this.add.text(cx, cy - 110, 'BAZA', {
-            fontFamily: 'Cinzel, serif',
-            fontSize: '14px',
-            color: '#E6B800'
-        });
-        this.playAreaLabel.setOrigin(0.5);
-        this.playAreaLabel.setAlpha(0.4);
-        this.playAreaLabel.setDepth(-50);
     }
 
     shutdown() {
