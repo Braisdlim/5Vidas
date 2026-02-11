@@ -3,7 +3,7 @@ import { CincoVidasState, PlayerSchema, CardSchema, PlayedCardSchema } from "../
 import { GameState, Player, Card, PlayedCard } from "../engine/types";
 import { startNewRound, makePrediction, playCard, resolveTrickState, applyScores } from "../engine/round";
 import { GAME_CONFIG, PLAYER_COLORS, ANIM } from "../engine/constants";
-import { getValidMoves } from "../engine/rules";
+import { getValidMoves, getNextActivePlayerIndex } from "../engine/rules";
 
 export class CincoVidasRoom extends Room<CincoVidasState> {
     // Pure logic state (authoritative)
@@ -70,6 +70,55 @@ export class CincoVidasRoom extends Room<CincoVidasState> {
                 if (result.success && result.newState) {
                     this.updateLogicState(result.newState);
                     this.checkPhaseTransition();
+                }
+            }
+        });
+
+        this.onMessage("surrender", (client) => {
+            const playerIdx = this.logicState.players.findIndex(p => p.id === client.sessionId);
+            const player = this.logicState.players[playerIdx];
+
+            if (player) {
+                if (this.logicState.phase === 'lobby') {
+                    // In lobby, surrender = leave
+                    this.removePlayer(client.sessionId);
+                    return;
+                }
+
+                if (!player.isEliminated) {
+                    // Eliminar
+                    player.lives = 0;
+                    player.isEliminated = true;
+
+                    // Clear hand (return cards to "deck" logic)
+                    player.hand = [];
+                    player.handSize = 0;
+
+                    // Host Migration if needed
+                    if (player.isHost) {
+                        player.isHost = false;
+                        const nextHost = this.logicState.players.find(p =>
+                            p.id !== client.sessionId && !p.isBot && p.isConnected && !p.isEliminated
+                        );
+                        if (nextHost) nextHost.isHost = true;
+                    }
+
+                    // Check Instant Win (only 1 survivor)
+                    const survivors = this.logicState.players.filter(p => !p.isEliminated);
+                    if (survivors.length === 1) {
+                        this.updateLogicState({
+                            phase: 'gameOver',
+                            winnerId: survivors[0].id
+                        });
+                    } else if (this.logicState.activePlayerIndex === playerIdx) {
+                        // If it was their turn, advance to next
+                        const nextIdx = getNextActivePlayerIndex(playerIdx, this.logicState.players);
+                        this.logicState.activePlayerIndex = nextIdx;
+                        // Restart timer / check phase
+                        this.checkPhaseTransition();
+                    }
+
+                    this.syncState();
                 }
             }
         });

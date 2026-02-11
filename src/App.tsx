@@ -430,7 +430,11 @@ function App() {
     return (
         <div id="app">
             <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
-            <GameHUD />
+            <GameHUD onExit={() => {
+                setScreen('menu');
+                // Optional: Force history push to break game loop
+                window.history.pushState({ screen: 'menu' }, '', '#menu');
+            }} />
         </div>
     );
 }

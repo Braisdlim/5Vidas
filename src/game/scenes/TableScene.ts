@@ -187,7 +187,11 @@ export class TableScene extends Scene {
         // Update Hand
         const myPlayer = state.players.find(p => p.id === myId);
         if (myPlayer) {
-            this.hand.updateHand(myPlayer.hand);
+            if (myPlayer.isEliminated) {
+                this.hand.updateHand([]);
+            } else {
+                this.hand.updateHand(myPlayer.hand);
+            }
         }
 
         // Create opponent hands

@@ -151,12 +151,14 @@ export class MultiplayerClient {
 
     public leave() {
         this.clearSession(); // Explicit leave clears session
-        this.room?.leave(true); // Send 'consented' = true (implicit in Colyseus usually default? No, explicit true needed?)
-        // Colyseus client leave(consented?: boolean). Default true?
-        // Actually colyseus.js leave(consented) sends to server?
-        // Yes, updated protocol supports it.
-        // Assuming client.leave(true) implies consented.
+        this.room?.leave(true); // Send 'consented' = true
         this.room = null;
+    }
+
+    public surrender() {
+        if (this.room) {
+            this.room.send('surrender');
+        }
     }
 
     public send(type: string, message?: any) {

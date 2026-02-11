@@ -110,6 +110,23 @@ class GameController {
         }
     }
 
+    public surrender() {
+        if (this.isOnline) {
+            multiplayer.surrender();
+            return;
+        }
+        // Local: just eliminate self for now (or UI handles exit)
+        if (this.state && this.myPlayerId) {
+            const p = this.state.players.find(p => p.id === this.myPlayerId);
+            if (p) {
+                p.lives = 0;
+                p.isEliminated = true;
+                this.updateState({ players: [...this.state.players] });
+                // Force update
+            }
+        }
+    }
+
     public playCard(cardIndex: number) {
         if (this.isOnline) {
             multiplayer.send("play_card", cardIndex);

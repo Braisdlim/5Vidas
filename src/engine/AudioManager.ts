@@ -105,6 +105,14 @@ class AudioManager {
         osc.start(time);
         osc.stop(time + duration);
     }
+    public toggle() {
+        this.enabled = !this.enabled;
+        return this.enabled;
+    }
+
+    public isEnabled() {
+        return this.enabled;
+    }
 }
 
 export const audioManager = new AudioManager();

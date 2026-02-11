@@ -4,7 +4,12 @@ import { useState, useEffect } from 'react';
 import { audioManager } from '../engine/AudioManager';
 import { EventBus } from '../game/EventBus';
 
-export function GameHUD() {
+// ── INTERFACES ──
+interface GameHUDProps {
+    onExit?: () => void;
+}
+
+export function GameHUD({ onExit }: GameHUDProps) {
     // Subscribe only to relevant state parts to avoid excessive re-renders
     const phase = useGameStore(state => state.gameState?.phase);
     const activePlayerIndex = useGameStore(state => state.gameState?.activePlayerIndex);
@@ -27,6 +32,11 @@ export function GameHUD() {
 
     // Mobile detection
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+    // Menu & Surrender State
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [isSurrenderConfirm, setIsSurrenderConfirm] = useState(false);
+    const [soundEnabled, setSoundEnabled] = useState(audioManager.isEnabled());
 
     // Auto-open panel when prediction phase starts
     useEffect(() => {
@@ -66,6 +76,33 @@ export function GameHUD() {
 
     return (
         <div className="game-hud" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
+
+            {/* ── MENU BUTTON (Top Left) ── */}
+            <div style={{ position: 'absolute', top: '20px', left: '20px', pointerEvents: 'auto', zIndex: 101 }}>
+                <button
+                    className="btn-icon"
+                    onClick={() => {
+                        audioManager.playClick();
+                        setIsMenuOpen(true);
+                    }}
+                    style={{
+                        background: 'rgba(0,0,0,0.6)',
+                        border: '1px solid var(--color-gold)',
+                        borderRadius: '50%',
+                        width: '40px',
+                        height: '40px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '20px',
+                        color: 'var(--color-gold)',
+                        boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
+                        cursor: 'pointer'
+                    }}
+                >
+                    ⚙️
+                </button>
+            </div>
 
             {/* ── Top Bar Info ── */}
             <div className="hud-top-bar">
@@ -322,6 +359,131 @@ export function GameHUD() {
                     </div>
                 </div>
             )}
+            {/* ── SETTINGS MENU MODAL ── */}
+            {isMenuOpen && !isSurrenderConfirm && (
+                <div className="overlay" style={{ zIndex: 200, pointerEvents: 'auto' }}>
+                    <div className="panel flex-col" style={{ width: '300px', gap: '16px' }}>
+                        <h2 className="text-gold text-center mb-sm">MENÚ</h2>
+
+                        <button
+                            className="btn btn-secondary"
+                            onClick={() => {
+                                const newState = audioManager.toggle();
+                                setSoundEnabled(newState);
+                                audioManager.playClick();
+                            }}
+                            style={{ display: 'flex', justifyContent: 'space-between', padding: '12px' }}
+                        >
+                            <span>Sonido</span>
+                            <span>{soundEnabled ? '🔊 ON' : '🔇 OFF'}</span>
+                        </button>
+
+                        {!myPlayer.isEliminated && phase !== 'gameOver' && phase !== 'lobby' && (
+                            <button
+                                className="btn"
+                                onClick={() => {
+                                    audioManager.playClick();
+                                    setIsSurrenderConfirm(true);
+                                }}
+                                style={{
+                                    background: 'rgba(255, 68, 68, 0.2)',
+                                    border: '1px solid #ff4444',
+                                    color: '#ff6666',
+                                    padding: '12px',
+                                    marginTop: '8px'
+                                }}
+                            >
+                                🏳️ RENDIRSE
+                            </button>
+                        )}
+
+                        <button
+                            className="btn-text"
+                            onClick={() => {
+                                audioManager.playClick();
+                                setIsMenuOpen(false);
+                            }}
+                            style={{ marginTop: '8px' }}
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* ── EXIT BUTTON (For Eliminated / Spectators) ── */}
+            {(myPlayer.isEliminated || phase === 'gameOver') && (
+                <div style={{ position: 'absolute', top: '20px', left: '70px', pointerEvents: 'auto', zIndex: 101 }}>
+                    <button
+                        className="btn-secondary"
+                        onClick={() => {
+                            audioManager.playClick();
+                            // If online, leave properly
+                            if (gameController['isOnline']) { // Access private/protected if needed, or check store
+                                // Actually gameController.isOnline is private. 
+                                // We can check if multiplayer.isConnected() or just call leave() safely
+                                import('../network/MultiplayerClient').then(m => m.multiplayer.leave());
+                            }
+                            // Trigger exit navigation
+                            if (onExit) onExit();
+                        }}
+                        style={{
+                            padding: '8px 16px',
+                            fontSize: '12px',
+                            border: '1px solid #666',
+                            background: 'rgba(0,0,0,0.8)',
+                            color: '#aaa',
+                            borderRadius: '20px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            gap: '6px',
+                            alignItems: 'center'
+                        }}
+                    >
+                        <span>🚪</span>
+                        <span>Salir al Menú</span>
+                    </button>
+                </div>
+            )}
+
+            {/* ── SURRENDER CONFIRM MODAL ── */}
+            {isSurrenderConfirm && (
+                <div className="overlay" style={{ zIndex: 201, pointerEvents: 'auto' }}>
+                    <div className="panel flex-col" style={{ width: '300px', gap: '16px', border: '1px solid #ff4444' }}>
+                        <h2 className="text-center" style={{ color: '#ff6666' }}>⚠️ ¿RENDIRSE?</h2>
+                        <p className="text-center" style={{ fontSize: '14px', lineHeight: '1.4' }}>
+                            Perderás todas tus vidas y pasarás a modo espectador.
+                        </p>
+
+                        <div className="flex-row gap-sm" style={{ marginTop: '8px' }}>
+                            <button
+                                className="btn"
+                                onClick={() => {
+                                    audioManager.playClick();
+                                    setIsSurrenderConfirm(false);
+                                    //setIsMenuOpen(false); // Optional: keep menu open? No, close all.
+                                }}
+                                style={{ flex: 1, background: '#444' }}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                className="btn"
+                                onClick={() => {
+                                    audioManager.playClick();
+                                    gameController.surrender();
+                                    setIsSurrenderConfirm(false);
+                                    setIsMenuOpen(false);
+                                }}
+                                style={{ flex: 1, background: '#ff4444', color: 'white', fontWeight: 'bold' }}
+                            >
+                                Sí, Rendirse
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* ── GAME OVER MODAL ── */}
             {phase === 'gameOver' && (
                 <div className="overlay">

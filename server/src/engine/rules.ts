@@ -150,7 +150,9 @@ export function getPredictionOrder(
     }
 
     // Dealer predicts last
-    order.push(dealerIndex);
+    if (!players[dealerIndex].isEliminated) {
+        order.push(dealerIndex);
+    }
     return order;
 }
 
