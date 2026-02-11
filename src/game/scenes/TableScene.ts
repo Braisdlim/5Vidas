@@ -20,6 +20,7 @@ export class TableScene extends Scene {
     }
 
     create() {
+        this.input.topOnly = true;
         // ── Init Controller & Store ──
         const existingId = useGameStore.getState().myPlayerId;
         gameController.init(existingId || crypto.randomUUID());
@@ -63,6 +64,12 @@ export class TableScene extends Scene {
         // ── Hand ──
         this.hand = new Hand(this, this.scale.width / 2, this.scale.height - 50);
         this.add.existing(this.hand);
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('hitbox')) {
+                this.hand.setDebugHitboxes(true);
+            }
+        }
 
         // ── Particle Manager ──
         this.particleManager = new ParticleManager(this);

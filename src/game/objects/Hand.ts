@@ -1,6 +1,5 @@
 import { GameObjects, Scene } from 'phaser';
 import type { Card } from '../../engine/types';
-import { GAME_DIMENSIONS } from '../../engine/constants';
 import { EventBus } from '../EventBus';
 
 export class Hand extends GameObjects.Container {
@@ -9,12 +8,16 @@ export class Hand extends GameObjects.Container {
     private cardHeight = 226 / 2;
     private selectedCardId: string | null = null;
     private maxSpacing = 50; // Max overlap
+    private lastSpacing = 0;
+    private lastTotalWidth = 0;
+    private isAnimating = false;
+    private layoutTimer?: Phaser.Time.TimerEvent;
+    private debugHitboxes = false;
+    private debugBoxes: Map<string, GameObjects.Graphics> = new Map();
 
     constructor(scene: Scene, x: number, y: number) {
         super(scene, x, y);
         scene.add.existing(this);
-        // Ensure container itself doesn't block inputs unless needed, but here we set interactive on children.
-        // Actually, let's sort current cards by depth in update?
     }
 
     public updateHand(handData: Card[]) {
@@ -104,18 +107,13 @@ export class Hand extends GameObjects.Container {
             container.add([gfx, text]);
         }
 
-        // Interaction
-        // Full card hit area
-        const hitArea = new Phaser.Geom.Rectangle(-this.cardWidth / 2, -this.cardHeight / 2, this.cardWidth, this.cardHeight);
-        container.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
-
+        container.setData('id', cardData.id);
+        container.setInteractive();
         container.on('pointerdown', () => {
+            if (this.isAnimating) return;
             this.handleCardClick(cardData.id);
         });
 
-        // Removed hover effects for mobile optimization
-
-        container.setData('id', cardData.id);
         return container;
     }
 
@@ -124,15 +122,23 @@ export class Hand extends GameObjects.Container {
             // Confirm Play
             EventBus.emit('card-selected', cardId);
             this.selectedCardId = null;
-            // Layout (reset positions) logic will happen on update? 
-            // Better: Deselect visually immediately to show action?
-            // Actually, wait for state update to remove it.
         } else {
             // Select (Lift)
             this.selectedCardId = cardId;
-            // Update visuals
             this.updateSelectionVisuals();
         }
+    }
+
+    public setDebugHitboxes(enabled: boolean) {
+        this.debugHitboxes = enabled;
+        if (!enabled) {
+            for (const gfx of this.debugBoxes.values()) {
+                gfx.destroy();
+            }
+            this.debugBoxes.clear();
+        }
+
+        this.layoutCards();
     }
 
     private updateSelectionVisuals() {
@@ -150,9 +156,18 @@ export class Hand extends GameObjects.Container {
         const count = list.length;
         if (count === 0) return;
 
-        const totalWidth = Math.min(GAME_DIMENSIONS.WIDTH - 60, count * this.maxSpacing);
+        const availableWidth = Math.max(this.scene.scale.width - 60, this.cardWidth);
+        const totalWidth = Math.min(availableWidth, count * this.maxSpacing);
         const spacing = totalWidth / count;
         const startX = -(totalWidth / 2) + (spacing / 2);
+
+        this.lastSpacing = spacing;
+        this.lastTotalWidth = totalWidth;
+
+        this.isAnimating = true;
+        if (this.layoutTimer) {
+            this.layoutTimer.remove(false);
+        }
 
         list.forEach((c, i) => {
             const card = this.cards.get(c.id);
@@ -175,6 +190,22 @@ export class Hand extends GameObjects.Container {
                     ease: 'Quad.easeOut'
                 });
 
+                const isEdge = i === 0 || i === count - 1;
+                const baseHitWidth = Math.max(spacing, this.cardWidth * 0.35);
+                const hitWidth = isEdge ? this.cardWidth : baseHitWidth;
+                const hitHeight = this.cardHeight * 0.85;
+                const hitX = isEdge ? -this.cardWidth / 2 : (this.cardWidth / 2) - hitWidth;
+                const hitY = -this.cardHeight / 2;
+                const hitArea = new Phaser.Geom.Rectangle(hitX, hitY, hitWidth, hitHeight);
+                card.setInteractive(hitArea, Phaser.Geom.Rectangle.Contains);
+
+                if (this.debugHitboxes) {
+                    const gfx = this.getOrCreateDebugBox(c.id, card);
+                    gfx.clear();
+                    gfx.lineStyle(2, isEdge ? 0x00ff7f : 0xffcc00, 0.9);
+                    gfx.strokeRect(hitX, hitY, hitWidth, hitHeight);
+                }
+
                 // Depth sorting logic:
                 // Standard Fan: Index order (0 at bottom, N at top).
                 // But we want to preserve this unless hovered.
@@ -190,5 +221,20 @@ export class Hand extends GameObjects.Container {
                 }
             }
         });
+
+        this.layoutTimer = this.scene.time.delayedCall(220, () => {
+            this.isAnimating = false;
+        });
+    }
+
+    private getOrCreateDebugBox(cardId: string, card: GameObjects.Container) {
+        let gfx = this.debugBoxes.get(cardId);
+        if (!gfx) {
+            gfx = new GameObjects.Graphics(this.scene);
+            card.add(gfx);
+            this.debugBoxes.set(cardId, gfx);
+        }
+
+        return gfx;
     }
 }
