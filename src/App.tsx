@@ -122,12 +122,17 @@ function App() {
             <div id="app">
                 <div className="overlay">
                     <div className="panel flex-col gap-md" style={{ textAlign: 'center', width: '90%', maxWidth: '360px' }}>
-                        <h1 style={{ marginBottom: '4px', textShadow: '0 0 30px rgba(230,184,0,0.3)' }}>
-                            CINCO VIDAS
-                        </h1>
-                        <p className="text-muted" style={{ fontSize: '13px', marginBottom: '12px' }}>
-                            Juego de cartas de baraja española
-                        </p>
+                        <img
+                            src="assets/logo.png"
+                            alt="Cinco Vidas"
+                            style={{
+                                width: '180px',
+                                height: 'auto',
+                                margin: '0 auto 24px auto',
+                                display: 'block',
+                                filter: 'drop-shadow(0 0 15px rgba(230,184,0,0.3))'
+                            }}
+                        />
 
                         <input
                             className="input"
