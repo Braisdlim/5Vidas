@@ -15,6 +15,16 @@
     --border-gold: 1px solid var(--color-gold);
 }
 
+html {
+    width: 100%;
+    height: 100%;
+    min-height: 100dvh;
+    min-height: calc(var(--vh, 1vh) * 100);
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+}
+
 body {
     margin: 0;
     padding: 0;
@@ -24,12 +34,43 @@ body {
     overflow: hidden;
     /* Prevent scroll on mobile */
     user-select: none;
+    width: 100%;
+    height: 100%;
+    min-height: 100dvh;
+    min-height: calc(var(--vh, 1vh) * 100);
+    position: fixed;
+    inset: 0;
+    overscroll-behavior: none;
+    touch-action: manipulation;
 }
 
 #app {
+    width: 100%;
+    height: 100%;
+    position: relative;
+}
+
+#root {
+    width: 100%;
+    height: 100%;
+}
+
+#game-container {
     width: 100vw;
     height: 100vh;
-    position: relative;
+    height: 100dvh;
+    height: calc(var(--vh, 1vh) * 100);
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+}
+
+canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+    position: absolute;
+    inset: 0;
 }
 
 /* ── Typography ── */
@@ -166,6 +207,11 @@ h3 {
 .input:focus {
     border-color: var(--color-gold);
     box-shadow: 0 0 8px rgba(230, 184, 0, 0.2);
+}
+
+input,
+textarea {
+    user-select: text;
 }
 
 /* ── HUD Specifics ── */

@@ -6,10 +6,19 @@ export class MultiplayerClient {
     private client: Client;
     private room: Room | null = null;
     // For production, this should be configurable
-    private endpoint = "ws://localhost:2567";
+    private endpoint = this.resolveEndpoint();
 
     constructor() {
         this.client = new Client(this.endpoint);
+    }
+
+    private resolveEndpoint(): string {
+        const envEndpoint = import.meta.env.VITE_COLYSEUS_ENDPOINT;
+        if (typeof envEndpoint === "string" && envEndpoint.length > 0) {
+            return envEndpoint;
+        }
+
+        return "ws://localhost:2567";
     }
 
     public isConnected(): boolean {
