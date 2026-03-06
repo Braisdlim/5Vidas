@@ -7,6 +7,7 @@ import { multiplayer } from './network/MultiplayerClient';
 import { useGameStore } from './store/gameStore';
 
 import { audioManager } from './engine/AudioManager';
+import { useTranslation } from './i18n';
 
 type GameScreen = 'menu' | 'lobby' | 'game' | 'setup_local';
 
@@ -20,6 +21,7 @@ function App() {
     const [screen, setScreen] = useState<GameScreen>('menu');
     const [botCount, setBotCount] = useState(3);
     const [botDifficulty, setBotDifficulty] = useState<BotDifficulty>(BotDifficulty.Medium);
+    const { t, lang, toggleLang } = useTranslation();
     const [playerName, setPlayerName] = useState(() => {
         try {
             const stored = localStorage.getItem('cinco-vidas-player');
@@ -88,7 +90,7 @@ function App() {
                 setLobbyState(prev => ({
                     ...prev,
                     isConnecting: true,
-                    status: 'Recuperando sesión anterior...',
+                    status: t('connection.recovering'),
                     // Don't show error yet
                     error: undefined
                 }));
@@ -150,7 +152,7 @@ function App() {
 
         // Generate bots
         const bots = Array.from({ length: botCount }, (_, i) => `Bot ${i + 1}`);
-        gameController.startGame([playerName || 'Jugador', ...bots], botDifficulty);
+        gameController.startGame([playerName || t('generic.player'), ...bots], botDifficulty);
 
         setScreen('game');
     };
@@ -164,7 +166,7 @@ function App() {
             ...prev,
             isConnecting: true,
             error: undefined,
-            status: 'Despertando servidor... (puede tardar ~30s la primera vez)',
+            status: t('connection.waking'),
             canRetry: false
         }));
 
@@ -182,8 +184,8 @@ function App() {
             setLobbyState(prev => ({
                 ...prev,
                 status: attempt === 1
-                    ? 'Conectando...'
-                    : `Reintentando (${attempt}/${maxAttempts})...`
+                    ? t('connection.connecting')
+                    : `${t('connection.retrying')} (${attempt}/${maxAttempts})...`
             }));
 
             try {
@@ -217,8 +219,8 @@ function App() {
             isConnecting: false,
             status: undefined,
             error: action.kind === 'join'
-                ? 'No se pudo conectar. Verifica el codigo o espera unos segundos.'
-                : 'No se pudo crear la sala. El servidor puede estar dormido.',
+                ? t('connection.joinError')
+                : t('connection.createError'),
             canRetry: true
         }));
         gameController.setOnlineMode(false);
@@ -227,7 +229,7 @@ function App() {
     const handleCreateRoom = async (options: { maxPlayers: number }) => {
         await runLobbyAction({
             kind: 'create',
-            options: { maxPlayers: options.maxPlayers, name: playerName || 'Anfitrión' }
+            options: { maxPlayers: options.maxPlayers, name: playerName || t('generic.hostName') }
         });
     };
 
@@ -235,7 +237,7 @@ function App() {
         await runLobbyAction({
             kind: 'join',
             code,
-            name: playerName || 'Jugador'
+            name: playerName || t('generic.player')
         });
     };
 
@@ -272,7 +274,7 @@ function App() {
                         <input
                             className="input"
                             type="text"
-                            placeholder="Tu nombre..."
+                            placeholder={t('menu.namePlaceholder')}
                             value={playerName}
                             onChange={(e) => setPlayerName(e.target.value)}
                             maxLength={16}
@@ -287,7 +289,7 @@ function App() {
                             }}
                             style={{ width: '100%', padding: '14px', fontSize: '16px' }}
                         >
-                            🃏 Vs Bots (Local)
+                            {t('menu.vsBots')}
                         </button>
 
                         <button
@@ -298,7 +300,20 @@ function App() {
                             }}
                             style={{ width: '100%', padding: '12px' }}
                         >
-                            🌐 Multijugador Online
+                            {t('menu.multiplayer')}
+                        </button>
+
+                        {/* Language toggle */}
+                        <button
+                            className="btn-text"
+                            onClick={() => {
+                                audioManager.playClick();
+                                toggleLang();
+                            }}
+                            title={lang === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+                            style={{ marginTop: '8px', fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                        >
+                            🌐 {lang === 'es' ? 'English' : 'Español'}
                         </button>
 
                         <p className="text-muted" style={{ fontSize: '11px', marginTop: '24px' }}>
@@ -345,16 +360,16 @@ function App() {
             <div id="app">
                 <div className="overlay">
                     <div className="panel flex-col gap-md fade-in" style={{ textAlign: 'center', width: '90%', maxWidth: '360px' }}>
-                        <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>PARTIDA LOCAL</h2>
+                        <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>{t('setup.title')}</h2>
 
                         <div style={{ margin: '24px 0', width: '100%' }}>
                             {/* DIFFICULTY SELECTOR */}
-                            <label style={{ display: 'block', marginBottom: '8px', color: '#eee', fontSize: '14px' }}>Dificultad de la IA</label>
+                            <label style={{ display: 'block', marginBottom: '8px', color: '#eee', fontSize: '14px' }}>{t('setup.difficulty')}</label>
                             <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
                                 {[
-                                    { level: BotDifficulty.Easy, label: 'Fácil', color: '#4caf50' },
-                                    { level: BotDifficulty.Medium, label: 'Normal', color: '#ffc107' },
-                                    { level: BotDifficulty.Hard, label: 'Difícil', color: '#ff5252' }
+                                    { level: BotDifficulty.Easy, label: t('setup.easy'), color: '#4caf50' },
+                                    { level: BotDifficulty.Medium, label: t('setup.medium'), color: '#ffc107' },
+                                    { level: BotDifficulty.Hard, label: t('setup.hard'), color: '#ff5252' }
                                 ].map(({ level, label, color }) => {
                                     const isSelected = botDifficulty === level;
                                     return (
@@ -385,7 +400,7 @@ function App() {
                             </div>
 
                             <label style={{ display: 'block', marginBottom: '12px', color: '#eee' }}>
-                                Oponentes (Bots): <span style={{ color: 'var(--color-gold)', fontWeight: 'bold', fontSize: '18px' }}>{botCount}</span>
+                                {t('setup.opponents')} <span style={{ color: 'var(--color-gold)', fontWeight: 'bold', fontSize: '18px' }}>{botCount}</span>
                             </label>
                             <input
                                 type="range"
@@ -409,7 +424,7 @@ function App() {
                                     handleStartGame();
                                 }}
                             >
-                                JUGAR
+                                {t('setup.play')}
                             </button>
                             <button
                                 className="btn-text"
@@ -418,7 +433,7 @@ function App() {
                                     navigateTo('menu');
                                 }}
                             >
-                                Cancelar
+                                {t('setup.cancel')}
                             </button>
                         </div>
                     </div>
@@ -430,11 +445,7 @@ function App() {
     return (
         <div id="app">
             <PhaserGame ref={phaserRef} currentActiveScene={currentScene} />
-            <GameHUD onExit={() => {
-                setScreen('menu');
-                // Optional: Force history push to break game loop
-                window.history.pushState({ screen: 'menu' }, '', '#menu');
-            }} />
+            <GameHUD />
         </div>
     );
 }

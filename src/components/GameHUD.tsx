@@ -3,13 +3,9 @@ import { gameController } from '../game/GameController';
 import { useState, useEffect } from 'react';
 import { audioManager } from '../engine/AudioManager';
 import { EventBus } from '../game/EventBus';
+import { useTranslation } from '../i18n';
 
-// ── INTERFACES ──
-interface GameHUDProps {
-    onExit?: () => void;
-}
-
-export function GameHUD({ onExit }: GameHUDProps) {
+export function GameHUD() {
     // Subscribe only to relevant state parts to avoid excessive re-renders
     const phase = useGameStore(state => state.gameState?.phase);
     const activePlayerIndex = useGameStore(state => state.gameState?.activePlayerIndex);
@@ -33,10 +29,7 @@ export function GameHUD({ onExit }: GameHUDProps) {
     // Mobile detection
     const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
 
-    // Menu & Surrender State
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [isSurrenderConfirm, setIsSurrenderConfirm] = useState(false);
-    const [soundEnabled, setSoundEnabled] = useState(audioManager.isEnabled());
+    const { t } = useTranslation();
 
     // Auto-open panel when prediction phase starts
     useEffect(() => {
@@ -77,38 +70,11 @@ export function GameHUD({ onExit }: GameHUDProps) {
     return (
         <div className="game-hud" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
 
-            {/* ── MENU BUTTON (Top Left) ── */}
-            <div style={{ position: 'absolute', top: '20px', left: '20px', pointerEvents: 'auto', zIndex: 101 }}>
-                <button
-                    className="btn-icon"
-                    onClick={() => {
-                        audioManager.playClick();
-                        setIsMenuOpen(true);
-                    }}
-                    style={{
-                        background: 'rgba(0,0,0,0.6)',
-                        border: '1px solid var(--color-gold)',
-                        borderRadius: '50%',
-                        width: '40px',
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '20px',
-                        color: 'var(--color-gold)',
-                        boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
-                        cursor: 'pointer'
-                    }}
-                >
-                    ⚙️
-                </button>
-            </div>
-
             {/* ── Top Bar Info ── */}
             <div className="hud-top-bar">
                 <div className="hud-info-panel">
-                    <span className="text-gold">Ronda {currentRound}</span>
-                    <span>Cartas: {cardsThisRound}</span>
+                    <span className="text-gold">{t('hud.round')} {currentRound}</span>
+                    <span>{t('hud.cards')} {cardsThisRound}</span>
                     {turnTimer !== undefined && turnTimer > 0 && (
                         <span style={{ color: turnTimer <= 5 ? 'var(--color-red)' : '#fff' }}>⏱ {turnTimer}s</span>
                     )}
@@ -119,7 +85,7 @@ export function GameHUD({ onExit }: GameHUDProps) {
             {isMyTurn && (
                 <div className="hud-status">
                     <span className="status-badge">
-                        {phase === 'predicting' ? 'TU TURNO DE PREDECIR' : 'TU TURNO'}
+                        {phase === 'predicting' ? t('hud.yourTurnPredict') : t('hud.yourTurn')}
                     </span>
                 </div>
             )}
@@ -128,7 +94,7 @@ export function GameHUD({ onExit }: GameHUDProps) {
             {phase === 'lobby' && (
                 <div className="overlay">
                     <div className="panel flex-col flex-center" style={{ width: '90%', maxWidth: '400px' }}>
-                        <h2 className="text-gold mb-md">Sala de Espera</h2>
+                        <h2 className="text-gold mb-md">{t('hud.waitingRoom')}</h2>
 
                         <div className="lobby-list mb-lg">
                             {players.map((p, index) => (
@@ -136,13 +102,13 @@ export function GameHUD({ onExit }: GameHUDProps) {
                                     <div className="flex-center gap-sm">
                                         <div className="player-avatar" style={{ background: p.color }}></div>
                                         <span style={{ fontWeight: p.id === myPlayerId ? 'bold' : 'normal' }}>
-                                            {p.name} {p.id === myPlayerId ? '(Tú)' : ''} {index === 0 ? '👑' : ''}
+                                            {p.name} {p.id === myPlayerId ? t('hud.you') : ''} {index === 0 ? '👑' : ''}
                                         </span>
                                     </div>
-                                    <span title={p.isConnected ? 'Conectado' : 'Desconectado'}>{p.isConnected ? '🟢' : '🔴'}</span>
+                                    <span title={p.isConnected ? t('hud.connected') : t('hud.disconnectedStatus')}>{p.isConnected ? '🟢' : '🔴'}</span>
                                 </div>
                             ))}
-                            {players.length === 0 && <p className="text-muted p-md">Conectando...</p>}
+                            {players.length === 0 && <p className="text-muted p-md">{t('hud.connectingDots')}</p>}
                         </div>
 
                         {/* Only Host can start (Player 0) */}
@@ -156,12 +122,12 @@ export function GameHUD({ onExit }: GameHUDProps) {
                                 disabled={players.length < 2}
                                 style={{ width: '100%', padding: '16px', fontSize: '16px' }}
                             >
-                                {players.length < 2 ? 'Esperando jugadores (Mín 2)...' : 'EMPEZAR PARTIDA'}
+                                {players.length < 2 ? t('hud.waitingMinPlayers') : t('hud.startMatch')}
                             </button>
                         ) : (
                             <div style={{ textAlign: 'center', padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', width: '100%' }}>
                                 <p className="text-muted" style={{ fontSize: '13px', margin: 0 }}>
-                                    Esperando al anfitrión ({players[0]?.name}) para empezar...
+                                    {t('hud.waitingHostStart', { name: players[0]?.name || '' })}
                                 </p>
                             </div>
                         )}
@@ -200,7 +166,7 @@ export function GameHUD({ onExit }: GameHUDProps) {
                             paddingBottom: '4px',
                             fontWeight: 'bold'
                         }}>
-                            {phase === 'predicting' ? 'Predicciones' : 'Marcador'}
+                            {phase === 'predicting' ? t('hud.predictions') : t('hud.scoreboard')}
                         </span>
                         {players.map(p => {
                             const isComplete = phase === 'playing' && p.prediction >= 0;
@@ -261,13 +227,14 @@ export function GameHUD({ onExit }: GameHUDProps) {
                                     fontWeight: 'bold',
                                     textShadow: '0 2px 4px rgba(0,0,0,0.8)'
                                 }}>
-                                    ¿Cuántas bazas?
+                                    {t('hud.howManyTricks')}
                                 </h2>
                                 <div className="prediction-grid">
                                     {(() => {
                                         // "Sandwich Rule" Logic
-                                        const totalPredictions = players.reduce((sum, p) => sum + (p.prediction >= 0 ? p.prediction : 0), 0);
-                                        const pendingPlayers = players.filter(p => p.prediction === -1).length;
+                                        const activePlayers = players.filter(p => !p.isEliminated);
+                                        const totalPredictions = activePlayers.reduce((sum, p) => sum + (p.prediction >= 0 ? p.prediction : 0), 0);
+                                        const pendingPlayers = activePlayers.filter(p => p.prediction === -1).length;
                                         // If I am active, I am pending. If pending == 1, I am the last one.
                                         const isLast = pendingPlayers === 1;
                                         const calculatedForbidden = isLast ? ((cardsThisRound || 0) - totalPredictions) : -1;
@@ -282,7 +249,7 @@ export function GameHUD({ onExit }: GameHUDProps) {
                                                             className={`prediction-chip ${isForbidden ? 'is-forbidden' : ''}`}
                                                             onClick={() => !isForbidden && handlePredict(i)}
                                                             disabled={isForbidden}
-                                                            title={isForbidden ? "Regla: La suma no puede igualar las cartas" : ""}
+                                                            title={isForbidden ? t('hud.sandwichTooltip') : ""}
                                                         >
                                                             {i}
                                                         </button>
@@ -298,7 +265,7 @@ export function GameHUD({ onExit }: GameHUDProps) {
                                                         gridColumn: '1 / -1',
                                                         lineHeight: '1.3'
                                                     }}>
-                                                        ⚠️ {calculatedForbidden} bloqueado (Sandwich)
+                                                        ⚠️ {calculatedForbidden} {t('hud.sandwichBlocked')}
                                                     </p>
                                                 )}
                                             </>
@@ -315,16 +282,16 @@ export function GameHUD({ onExit }: GameHUDProps) {
             {phase === 'scoring' && (
                 <div className="overlay">
                     <div className="panel flex-col" style={{ maxWidth: '500px', width: '90%' }}>
-                        <h2 className="text-center mb-md">Resultados Ronda {currentRound}</h2>
+                        <h2 className="text-center mb-md">{t('scoring.title')} {currentRound}</h2>
 
                         <div style={{ maxHeight: '40vh', overflowY: 'auto' }}>
                             <table className="scoreboard-table">
                                 <thead>
                                     <tr>
-                                        <th>Jugador</th>
-                                        <th className="cell-center">Pred.</th>
-                                        <th className="cell-center">Hechas</th>
-                                        <th className="cell-right">Vidas</th>
+                                        <th>{t('scoring.player')}</th>
+                                        <th className="cell-center">{t('scoring.pred')}</th>
+                                        <th className="cell-center">{t('scoring.won')}</th>
+                                        <th className="cell-right">{t('scoring.lives')}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -354,147 +321,22 @@ export function GameHUD({ onExit }: GameHUDProps) {
                             }}
                             style={{ padding: '14px', fontSize: '16px' }}
                         >
-                            Siguiente Ronda
+                            {t('scoring.nextRound')}
                         </button>
                     </div>
                 </div>
             )}
-            {/* ── SETTINGS MENU MODAL ── */}
-            {isMenuOpen && !isSurrenderConfirm && (
-                <div className="overlay" style={{ zIndex: 200, pointerEvents: 'auto' }}>
-                    <div className="panel flex-col" style={{ width: '300px', gap: '16px' }}>
-                        <h2 className="text-gold text-center mb-sm">MENÚ</h2>
-
-                        <button
-                            className="btn btn-secondary"
-                            onClick={() => {
-                                const newState = audioManager.toggle();
-                                setSoundEnabled(newState);
-                                audioManager.playClick();
-                            }}
-                            style={{ display: 'flex', justifyContent: 'space-between', padding: '12px' }}
-                        >
-                            <span>Sonido</span>
-                            <span>{soundEnabled ? '🔊 ON' : '🔇 OFF'}</span>
-                        </button>
-
-                        {!myPlayer.isEliminated && phase !== 'gameOver' && phase !== 'lobby' && (
-                            <button
-                                className="btn"
-                                onClick={() => {
-                                    audioManager.playClick();
-                                    setIsSurrenderConfirm(true);
-                                }}
-                                style={{
-                                    background: 'rgba(255, 68, 68, 0.2)',
-                                    border: '1px solid #ff4444',
-                                    color: '#ff6666',
-                                    padding: '12px',
-                                    marginTop: '8px'
-                                }}
-                            >
-                                🏳️ RENDIRSE
-                            </button>
-                        )}
-
-                        <button
-                            className="btn-text"
-                            onClick={() => {
-                                audioManager.playClick();
-                                setIsMenuOpen(false);
-                            }}
-                            style={{ marginTop: '8px' }}
-                        >
-                            Cerrar
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* ── EXIT BUTTON (For Eliminated / Spectators) ── */}
-            {(myPlayer.isEliminated || phase === 'gameOver') && (
-                <div style={{ position: 'absolute', top: '20px', left: '70px', pointerEvents: 'auto', zIndex: 101 }}>
-                    <button
-                        className="btn-secondary"
-                        onClick={() => {
-                            audioManager.playClick();
-                            // If online, leave properly
-                            if (gameController['isOnline']) { // Access private/protected if needed, or check store
-                                // Actually gameController.isOnline is private. 
-                                // We can check if multiplayer.isConnected() or just call leave() safely
-                                import('../network/MultiplayerClient').then(m => m.multiplayer.leave());
-                            }
-                            // Trigger exit navigation
-                            if (onExit) onExit();
-                        }}
-                        style={{
-                            padding: '8px 16px',
-                            fontSize: '12px',
-                            border: '1px solid #666',
-                            background: 'rgba(0,0,0,0.8)',
-                            color: '#aaa',
-                            borderRadius: '20px',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            gap: '6px',
-                            alignItems: 'center'
-                        }}
-                    >
-                        <span>🚪</span>
-                        <span>Salir al Menú</span>
-                    </button>
-                </div>
-            )}
-
-            {/* ── SURRENDER CONFIRM MODAL ── */}
-            {isSurrenderConfirm && (
-                <div className="overlay" style={{ zIndex: 201, pointerEvents: 'auto' }}>
-                    <div className="panel flex-col" style={{ width: '300px', gap: '16px', border: '1px solid #ff4444' }}>
-                        <h2 className="text-center" style={{ color: '#ff6666' }}>⚠️ ¿RENDIRSE?</h2>
-                        <p className="text-center" style={{ fontSize: '14px', lineHeight: '1.4' }}>
-                            Perderás todas tus vidas y pasarás a modo espectador.
-                        </p>
-
-                        <div className="flex-row gap-sm" style={{ marginTop: '8px' }}>
-                            <button
-                                className="btn"
-                                onClick={() => {
-                                    audioManager.playClick();
-                                    setIsSurrenderConfirm(false);
-                                    //setIsMenuOpen(false); // Optional: keep menu open? No, close all.
-                                }}
-                                style={{ flex: 1, background: '#444' }}
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                className="btn"
-                                onClick={() => {
-                                    audioManager.playClick();
-                                    gameController.surrender();
-                                    setIsSurrenderConfirm(false);
-                                    setIsMenuOpen(false);
-                                }}
-                                style={{ flex: 1, background: '#ff4444', color: 'white', fontWeight: 'bold' }}
-                            >
-                                Sí, Rendirse
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* ── GAME OVER MODAL ── */}
             {phase === 'gameOver' && (
                 <div className="overlay">
                     <div className="panel flex-col flex-center">
-                        <h1 className="text-gold mb-md" style={{ fontSize: '36px' }}>FIN DEL JUEGO</h1>
+                        <h1 className="text-gold mb-md" style={{ fontSize: '36px' }}>{t('gameOver.title')}</h1>
                         {(() => {
                             const winner = players.find(p => !p.isEliminated);
                             if (winner) {
-                                return <p style={{ fontSize: '18px', marginBottom: '24px' }}>¡Ganador: <strong className="text-gold">{winner.name}</strong>!</p>
+                                return <p style={{ fontSize: '18px', marginBottom: '24px' }}>{t('gameOver.winner')} <strong className="text-gold">{winner.name}</strong>!</p>
                             } else {
-                                return <p className="mb-lg">¡Empate final!</p>
+                                return <p className="mb-lg">{t('gameOver.draw')}</p>
                             }
                         })()}
 
@@ -506,7 +348,7 @@ export function GameHUD({ onExit }: GameHUDProps) {
                             }}
                             style={{ padding: '16px 32px' }}
                         >
-                            Menú Principal
+                            {t('gameOver.mainMenu')}
                         </button>
                     </div>
                 </div>

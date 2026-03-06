@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { audioManager } from '../engine/AudioManager';
+import { useTranslation } from '../i18n';
 
 type LobbyView = 'menu' | 'host' | 'join' | 'create_setup';
 
@@ -42,6 +43,7 @@ export const LobbyUI: React.FC<Props> = ({
     const [view, setView] = useState<LobbyView>('menu');
     const [joinCode, setJoinCode] = useState('');
     const [maxPlayers, setMaxPlayers] = useState(4);
+    const { t } = useTranslation();
 
     // If roomCode is present, force view to 'host' (we are in a room)
     // This allows parent component to control state via roomCode presence
@@ -71,7 +73,7 @@ export const LobbyUI: React.FC<Props> = ({
         return (
             <div className="panel flex-col gap-md fade-in" style={{ width: '100%', maxWidth: '360px', textAlign: 'center' }}>
                 <h2 style={{ color: 'var(--color-gold)', textShadow: '0 0 10px rgba(230,184,0,0.3)', marginBottom: '16px' }}>
-                    MULTIPLAYER
+                    {t('lobby.title')}
                 </h2>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
@@ -83,8 +85,8 @@ export const LobbyUI: React.FC<Props> = ({
                     >
                         <span style={{ fontSize: '24px' }}>🏠</span>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: 'bold', fontSize: '18px' }}>CREAR SALA</span>
-                            <span style={{ fontSize: '12px', opacity: 0.8 }}>Ser el anfitrión</span>
+                            <span style={{ fontWeight: 'bold', fontSize: '18px' }}>{t('lobby.createRoom')}</span>
+                            <span style={{ fontSize: '12px', opacity: 0.8 }}>{t('lobby.createRoomSub')}</span>
                         </div>
                     </button>
 
@@ -98,13 +100,13 @@ export const LobbyUI: React.FC<Props> = ({
                     >
                         <span style={{ fontSize: '24px' }}>🔗</span>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: 'bold', fontSize: '18px' }}>UNIRSE</span>
-                            <span style={{ fontSize: '12px', opacity: 0.8 }}>Con código de sala</span>
+                            <span style={{ fontWeight: 'bold', fontSize: '18px' }}>{t('lobby.joinRoom')}</span>
+                            <span style={{ fontSize: '12px', opacity: 0.8 }}>{t('lobby.joinRoomSub')}</span>
                         </div>
                     </button>
 
                     <button className="btn-text mt-sm" onClick={onBack}>
-                        ← Volver al Menú
+                        {t('lobby.backToMenu')}
                     </button>
                 </div>
             </div>
@@ -115,11 +117,11 @@ export const LobbyUI: React.FC<Props> = ({
     if (effectiveView === 'create_setup') {
         return (
             <div className="panel flex-col gap-md fade-in" style={{ width: '100%', maxWidth: '360px', textAlign: 'center' }}>
-                <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>CONFIGURAR SALA</h2>
+                <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>{t('lobby.configTitle')}</h2>
 
                 <div style={{ margin: '24px 0', width: '100%' }}>
                     <label style={{ display: 'block', marginBottom: '12px', color: '#eee' }}>
-                        Máximo de Jugadores: <span style={{ color: 'var(--color-gold)', fontWeight: 'bold', fontSize: '18px' }}>{maxPlayers}</span>
+                        {t('lobby.maxPlayers')} <span style={{ color: 'var(--color-gold)', fontWeight: 'bold', fontSize: '18px' }}>{maxPlayers}</span>
                     </label>
                     <input
                         type="range"
@@ -141,7 +143,7 @@ export const LobbyUI: React.FC<Props> = ({
                         onClick={handleCreateConfirm}
                         disabled={isConnecting}
                     >
-                        {isConnecting ? 'CREANDO...' : 'CREAR SALA'}
+                        {isConnecting ? t('lobby.creating') : t('lobby.createConfirm')}
                     </button>
                     {statusMessage && (
                         <div className="status-banner">
@@ -150,11 +152,11 @@ export const LobbyUI: React.FC<Props> = ({
                     )}
                     {onRetry && !isConnecting && (
                         <button className="btn btn-secondary" onClick={onRetry}>
-                            REINTENTAR
+                            {t('lobby.retry')}
                         </button>
                     )}
                     <button className="btn-text" onClick={() => setView('menu')} disabled={isConnecting}>
-                        Cancelar
+                        {t('generic.cancel')}
                     </button>
                 </div>
             </div>
@@ -165,9 +167,9 @@ export const LobbyUI: React.FC<Props> = ({
     if (effectiveView === 'join') {
         return (
             <div className="panel flex-col gap-md fade-in" style={{ width: '100%', maxWidth: '360px', textAlign: 'center' }}>
-                <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>UNIRSE A SALA</h2>
+                <h2 style={{ color: 'var(--color-gold)', marginBottom: '8px' }}>{t('lobby.joinTitle')}</h2>
                 <p className="text-muted" style={{ fontSize: '14px', marginBottom: '16px' }}>
-                    Pide el código al anfitrión
+                    {t('lobby.askCode')}
                 </p>
 
                 <input
@@ -209,15 +211,15 @@ export const LobbyUI: React.FC<Props> = ({
                         onClick={handleJoin}
                         disabled={joinCode.length !== 4 || isConnecting}
                     >
-                        {isConnecting ? 'CONECTANDO...' : 'ENTRAR A SALA'}
+                        {isConnecting ? t('lobby.connecting') : t('lobby.enterRoom')}
                     </button>
                     {onRetry && !isConnecting && (
                         <button className="btn btn-secondary" onClick={onRetry}>
-                            REINTENTAR
+                            {t('lobby.retry')}
                         </button>
                     )}
                     <button className="btn-text" onClick={() => setView('menu')} disabled={isConnecting}>
-                        Cancelar
+                        {t('generic.cancel')}
                     </button>
                 </div>
             </div>
@@ -229,7 +231,7 @@ export const LobbyUI: React.FC<Props> = ({
         return (
             <div className="panel flex-col gap-md fade-in" style={{ width: '95%', maxWidth: '400px', textAlign: 'center' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
-                    <h2 style={{ color: 'var(--color-gold)', margin: 0 }}>SALA DE ESPERA</h2>
+                    <h2 style={{ color: 'var(--color-gold)', margin: 0 }}>{t('lobby.waitingRoom')}</h2>
                     <span style={{ fontSize: '12px', background: 'rgba(230,184,0,0.2)', color: 'var(--color-gold)', padding: '4px 8px', borderRadius: '4px' }}>
                         {players.length}/4
                     </span>
@@ -253,11 +255,11 @@ export const LobbyUI: React.FC<Props> = ({
                         margin: '8px 0'
                     }}
                 >
-                    <span style={{ fontSize: '12px', color: '#aaa', letterSpacing: '1px' }}>CÓDIGO DE SALA</span>
+                    <span style={{ fontSize: '12px', color: '#aaa', letterSpacing: '1px' }}>{t('lobby.roomCode')}</span>
                     <span style={{ fontSize: '42px', fontWeight: 'bold', color: 'var(--color-gold)', letterSpacing: '4px', textShadow: '0 0 15px rgba(230,184,0,0.4)' }}>
                         {roomCode || "----"}
                     </span>
-                    <span style={{ fontSize: '10px', color: '#666' }}>(Toca para copiar)</span>
+                    <span style={{ fontSize: '10px', color: '#666' }}>{t('lobby.tapToCopy')}</span>
                 </div>
 
                 <div className="players-list" style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
@@ -280,9 +282,9 @@ export const LobbyUI: React.FC<Props> = ({
                                     <span style={{ fontWeight: p.isHost ? 'bold' : 'normal', color: p.isHost ? 'var(--color-gold)' : '#eee' }}>
                                         {p.name}
                                     </span>
-                                    {isOffline && <span style={{ fontSize: '10px', color: '#aaa' }}>Desconectado...</span>}
+                                    {isOffline && <span style={{ fontSize: '10px', color: '#aaa' }}>{t('lobby.disconnected')}</span>}
                                 </div>
-                                {p.isHost && <span style={{ fontSize: '12px', color: 'var(--color-gold)' }}>ANFITRIÓN</span>}
+                                {p.isHost && <span style={{ fontSize: '12px', color: 'var(--color-gold)' }}>{t('lobby.host')}</span>}
                             </div>
                         );
                     })}
@@ -297,7 +299,7 @@ export const LobbyUI: React.FC<Props> = ({
                             opacity: 0.5
                         }}>
                             <span style={{ fontSize: '20px', marginRight: '12px', filter: 'grayscale(1)' }}>👤</span>
-                            <span style={{ fontSize: '13px', fontStyle: 'italic' }}>Esperando jugador...</span>
+                            <span style={{ fontSize: '13px', fontStyle: 'italic' }}>{t('lobby.waitingPlayer')}</span>
                         </div>
                     ))}
                 </div>
@@ -313,11 +315,11 @@ export const LobbyUI: React.FC<Props> = ({
                             }}
                             disabled={players.length < 2 && !players.some(p => p.isBot) && players.filter(p => p.isConnected !== false).length < 2} // Require 2 connected players or bots
                         >
-                            EMPEZAR PARTIDA
+                            {t('lobby.startGame')}
                         </button>
                     ) : (
                         <div style={{ padding: '12px', background: 'rgba(230,184,0,0.1)', borderRadius: '8px', color: 'var(--color-gold)', fontSize: '14px' }}>
-                            Esperando al anfitrión...
+                            {t('lobby.waitingHost')}
                         </div>
                     )}
 
@@ -336,7 +338,7 @@ export const LobbyUI: React.FC<Props> = ({
                             minHeight: '48px'
                         }}
                     >
-                        {isHost ? 'Cancelar Sala' : 'Salir de Sala'}
+                        {isHost ? t('lobby.cancelRoom') : t('lobby.leaveRoom')}
                     </button>
                 </div>
             </div>
